@@ -12,9 +12,10 @@ Inductive Binder :=
 | Single : tId -> Binder
 | BinderList : string -> tId -> Binder.
 
+(* no funapp until I know how to deal with arguments *)
 Inductive ArgumentHead :=
-| Atom : tId -> ArgumentHead
-| FunApp : fId -> (* ast term option *) list ArgumentHead -> ArgumentHead.
+| Atom : tId -> ArgumentHead.
+(* | FunApp : fId -> (* ast term option *) list ArgumentHead -> ArgumentHead. *)
 
 Definition getBinders b :=
   match b with
@@ -23,30 +24,30 @@ Definition getBinders b :=
   end.
 
 (* a.d. todo recursion! *)
-Fixpoint getArgSorts a :=
+Definition getArgSorts a :=
   match a with
   | Atom x => [x]
-  | FunApp _ xs => flat_map getArgSorts xs
+  (* | FunApp _ xs => flat_map getArgSorts xs *)
   end.
 
 Set Primitive Projections.
-Record position := mkPosition
-                     { binders : list Binder;
-                       head : ArgumentHead }.
-Record constructor := mkConstructor
-                        { cparameters : list (string * tId);
-                          cname : cId;
-                          cpositions : list position }.
+Record Position := mkPosition
+                     { pos_binders : list Binder;
+                       pos_head : ArgumentHead }.
+Record Constructor := mkConstructor
+                        { con_parameters : list (string * tId);
+                          con_name : cId;
+                          con_positions : list Position }.
 Unset Primitive Projections.
 
 (* a.d. todo, recursion! *)
 Definition getArgs c :=
-  flat_map (fun p => getArgSorts p.(head)) c.(cpositions).
+  flat_map (fun p => getArgSorts p.(pos_head)) c.(con_positions).
 
 From ASUB Require Import AL.
 
 Notation tIdMap elt := (M.t elt).
-Definition spec := tIdMap (list constructor).
+Definition spec := tIdMap (list Constructor).
 
 Record signature := mkSig {
                         sigSpec : spec;
@@ -63,31 +64,31 @@ Module Hsig_example.
    Open Scope string.
   
   Definition mySigSpec : spec := AL.fromList
-                                   [ ("vl", [ {| cparameters := [];
-                                                 cname := "lam";
-                                                 cpositions := [ {| binders := []; head := Atom "ty" |}
-                                                                 ; {| binders := [ Single "vl" ]; head := Atom "tm" |} ] |}
-                                              ; {| cparameters := [];
-                                                   cname := "tlam";
-                                                   cpositions := [ {| binders := [ Single "ty" ]; head := Atom "tm" |} ] |} ])
-                                     ; ("tm", [ {| cparameters := [];
-                                                   cname := "app";
-                                                   cpositions := [ {| binders := []; head := Atom "tm" |}
-                                                                   ; {| binders := []; head := Atom "tm" |} ] |}
-                                                ; {| cparameters := [];
-                                                     cname := "tapp";
-                                                     cpositions := [ {| binders := []; head := Atom "tm" |}
-                                                                     ; {| binders := []; head := Atom "ty" |} ] |}
-                                                ; {| cparameters := [];
-                                                     cname := "vt";
-                                                     cpositions := [ {| binders := []; head := Atom "vl" |} ] |} ])
-                                     ; ("ty", [ {| cparameters := [];
-                                                   cname := "arr";
-                                                   cpositions := [ {| binders := []; head := Atom "ty" |}
-                                                                   ; {| binders := []; head := Atom "ty" |} ] |}
-                                                ; {| cparameters := [];
-                                                     cname := "all";
-                                                     cpositions := [ {| binders := [ Single "ty" ]; head := Atom "ty" |} ] |} ]) ].
+                                   [ ("vl", [ {| con_parameters := [];
+                                                 con_name := "lam";
+                                                 con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |}
+                                                                 ; {| pos_binders := [ Single "vl" ]; pos_head := Atom "tm" |} ] |}
+                                              ; {| con_parameters := [];
+                                                   con_name := "tlam";
+                                                   con_positions := [ {| pos_binders := [ Single "ty" ]; pos_head := Atom "tm" |} ] |} ])
+                                     ; ("tm", [ {| con_parameters := [];
+                                                   con_name := "app";
+                                                   con_positions := [ {| pos_binders := []; pos_head := Atom "tm" |}
+                                                                   ; {| pos_binders := []; pos_head := Atom "tm" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "tapp";
+                                                     con_positions := [ {| pos_binders := []; pos_head := Atom "tm" |}
+                                                                     ; {| pos_binders := []; pos_head := Atom "ty" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "vt";
+                                                     con_positions := [ {| pos_binders := []; pos_head := Atom "vl" |} ] |} ])
+                                     ; ("ty", [ {| con_parameters := [];
+                                                   con_name := "arr";
+                                                   con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |}
+                                                                   ; {| pos_binders := []; pos_head := Atom "ty" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "all";
+                                                     con_positions := [ {| pos_binders := [ Single "ty" ]; pos_head := Atom "ty" |} ] |} ]) ].
 
   Compute M.find "ty"%string (M.empty _).
   Compute M.find "ty"%string mySigSpec.
