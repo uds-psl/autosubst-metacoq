@@ -30,3 +30,16 @@ Definition app_ s t := tApp s [t].
 
 Definition appRef_ name t :=
   app_ (ref_ name) t.
+
+Require Import List.
+Import ListNotations.
+
+Fixpoint mapi' {A B: Type} (f: nat -> A -> B) (as_: list A) (n: nat): list B :=
+  match as_ with
+  | [] => []
+  | a :: as_ =>
+    (f n a) :: (mapi' f as_ (S n))
+  end.
+
+Definition mapi {A B: Type} (f: nat -> A -> B) (as_: list A): list B :=
+  mapi' f as_ 0.
