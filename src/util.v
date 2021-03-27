@@ -1,5 +1,4 @@
-
-Require Import MetaCoq.Template.All.
+From MetaCoq.Template Require Import All.
 Require Import List.
 Import ListNotations Nat.
 
@@ -43,3 +42,16 @@ Fixpoint mapi' {A B: Type} (f: nat -> A -> B) (as_: list A) (n: nat): list B :=
 
 Definition mapi {A B: Type} (f: nat -> A -> B) (as_: list A): list B :=
   mapi' f as_ 0.
+
+(* Fixpoint enumerate' {A: Type} (l: list A) (n: nat) : list (nat * A) := *)
+(*   match l with *)
+(*   | [] => [] *)
+(*   | a :: l => (n, a) :: (enumerate' l (S n)) *)
+(*   end. *)
+(* Definition enumerate {A: Type} (l: list A) : list (nat * A) := enumerate' l 0. *)
+
+(* Definition findi {A: Type} (f: nat -> A -> bool) (l: list A ): option A := *)
+(*   match find (uncurry f) (enumerate l) with *)
+(*   | None => None *)
+(*   | Some (_, a) => Some a *)
+(*   end. *)
