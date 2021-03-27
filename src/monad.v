@@ -37,11 +37,22 @@ Module RWSE (T: RWSE_params).
     fun a r s => inr (T.empty, s, a).
   Definition run {A: Type} : M A -> T.R -> T.S -> T.E + (T.W * T.S * A) := fun ma => ma.
 
-  Declare Scope rwse_scope.
-  Notation "x <- c1 ;; c2" := (bind  c1 (fun x => c2))
-    (at level 100, c1 at next level, right associativity) : rwse_scope.
-  Open Scope rwse_scope.
+  Module Notations.
+    Declare Scope rwse_scope.
+    
+    Notation "x <- c1 ;; c2" := (bind  c1 (fun x => c2))
+                               (at level 100, c1 at next level, right associativity) : rwse_scope.
+    Notation "c1 ;; c2" := (bind  c1 (fun _ => c2))
+                          (at level 100, right associativity) : rwse_scope.
+    Print Grammar constr.
 
+    (* Bind Scope rwse_scope with M. *)
+    (* automatically put scope on top of the stack when this module is imported. *)
+    #[ global ]
+    Open Scope rwse_scope.
+  End Notations.
+
+  Import Notations.
   Definition ask {A: Type} : M T.R :=
     fun r s => inr (T.empty, s, r).
   Definition asks {A B: Type} : (T.R -> B) -> M B :=
@@ -66,8 +77,8 @@ Module RWSE (T: RWSE_params).
 
   Definition fmap2 {A B C: Type} : (A -> B -> C) -> M A -> M B -> M C :=
     fun f ma mb =>
-      bind (fmap f ma) (fun f' =>
-                       fmap f' mb).
+   f' <- (fmap f ma);;
+   fmap f' mb.
 
   Fixpoint sequence {A: Type} (ms: list (M A)) : M (list A) :=
     match ms with
@@ -88,13 +99,15 @@ Module RWSE (T: RWSE_params).
     match bs with
     | [] => ret init
     | b :: bs =>
-      bind (f init b) (fun init => m_fold_left f init bs)
+      init' <- f init b;;
+      m_fold_left f init' bs
     end.
            
   Fixpoint m_fold_right {A B: Type} (f: B -> A -> M A) (init: A) (bs: list B) : M A :=
     match bs with
     | [] => ret init
     | b :: bs =>
-      bind (m_fold_right f init bs) (fun a => f b a)
+      a <- m_fold_right f init bs;;
+      f b a
     end.
 End RWSE.
