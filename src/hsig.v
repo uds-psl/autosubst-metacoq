@@ -1,6 +1,7 @@
 (* Here I define the spec like that holds all the data for the code we want to generate *)
 Require Import String List.
 Import ListNotations.
+From ASUB Require Import AL.
 
 
 Notation tId := string.
@@ -40,11 +41,9 @@ Record Constructor := mkConstructor
                           con_positions : list Position }.
 Unset Primitive Projections.
 
-(* a.d. todo, recursion! *)
 Definition getArgs c :=
   flat_map (fun p => getArgSorts p.(pos_head)) c.(con_positions).
 
-From ASUB Require Import AL.
 
 Notation tIdMap elt := (M.t elt).
 Definition spec := tIdMap (list Constructor).
@@ -58,6 +57,25 @@ Record signature := mkSig {
                       }.
 
 Definition t := signature.
+
+Scheme Equality for string.
+Scheme Equality for Binder.
+Scheme Equality for ArgumentHead.
+(* a.d. TODO, scheme equality issues im bugtracker, ggf neues Issue *)
+(* Scheme Equality for Position. *)
+
+Notation eq_dec A := (forall x y:A, { x = y } + { x <> y }).
+Lemma Position_eq_dec : eq_dec Position.
+Proof.
+  repeat (decide equality).
+Qed.
+
+
+Lemma Constructor_eq_dec : eq_dec Constructor.
+Proof.
+  repeat (decide equality).
+Qed.
+
 
 Module Hsig_example.
   #[ local ]
@@ -90,8 +108,8 @@ Module Hsig_example.
                                                      con_name := "all";
                                                      con_positions := [ {| pos_binders := [ Single "ty" ]; pos_head := Atom "ty" |} ] |} ]) ].
 
-  Compute M.find "ty"%string (M.empty _).
-  Compute M.find "ty"%string mySigSpec.
+  (* Compute M.find "ty"%string (M.empty _). *)
+  (* Compute M.find "ty"%string mySigSpec. *)
 
   Definition mySig : signature := {|
     sigSpec := mySigSpec;
