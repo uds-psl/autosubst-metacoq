@@ -5,5 +5,8 @@ src/hsig.v
 src/HOASParser.v
 src/util.v
 src/monad.v
+src/graph.v
+src/sigAnalyzer.v
+src/phoas.v
 src/quotes.v
 src/generator.v

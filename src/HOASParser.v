@@ -1,7 +1,7 @@
 
 Require Import List String.
 Import ListNotations.
-From ASUB Require Import hsig AL.
+From ASUB Require Import hsig AL monad sigAnalyzer.
 
 
 Notation HOASSort := string.
@@ -85,11 +85,18 @@ Definition translate_constructor (hc: HOASConstructor) : (tId * Constructor) :=
   (hcon_target, c).
 
 Scheme Equality for string.
-Definition translate_spec (ss: list HOASSort) (hcs: list HOASConstructor) : spec :=
+Definition translate_spec (ss: list HOASSort) (hcs: list HOASConstructor) : Spec :=
   let cs := map translate_constructor hcs in
   let cs_by_sort := map (fun s => (s, map snd (filter (fun '(s', _) => string_beq s s') cs))) ss in
-  AL.fromList cs_by_sort.
+  SFMap.fromList cs_by_sort.
 
+
+
+Definition translate_signature (ss: list HOASSort) (hcs: list HOASConstructor) : E.t Signature :=
+  let spec := translate_spec ss hcs in
+  let canonical_order := ss in
+  build_signature None canonical_order spec.
+    
 (* The problems from the tests/phoasnotation.v are mostly solved.
  variadic binders and parameters also work now but parameter notation is pretty ugly since I don't know how to remove the extra symbols *)
 Module Example.
@@ -113,7 +120,8 @@ Module Example.
   Compute (fcbv_constrs "ty" "tm" "vl").
   
   (* Compute translate_spec fcbv_sorts fcbv_constrs. *)
-  (* Compute translate_spec (fcbv_constrs "ty" "tm" "vl") *)
+  Compute translate_spec fcbv_sorts (fcbv_constrs "ty" "tm" "vl").
+  Compute E.run (translate_signature fcbv_sorts (fcbv_constrs "ty" "tm" "vl")) tt tt.
 
   Definition variadic_sorts := [ "tm" := Sort ].
   Definition variadic_functors := [ "list" := Functor ].
