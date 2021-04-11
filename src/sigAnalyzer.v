@@ -60,7 +60,7 @@ Definition build_signature (componentsO: option (list (list tId))) (canonical_or
 
 
 Module Ex.
-  Definition spec := Hsig_example.mySigSpec2.
+  Definition spec := Hsig_example.mySigSpec.
   Definition g := build_graph spec.
   Open Scope string.
 
