@@ -2,13 +2,13 @@
 From ASUB Require Import AL hsig quotes util monad.
 From MetaCoq.Template Require Import All.
 Require Import List String.
-Import ListNotations.
+Import ListNotations MonadNotation.
 
 Axiom fls : False.
 
 Module S := Hsig_example.
 Module RWSE_params.
-  Definition R := signature.
+  Definition R := Signature.
   Definition W := string.
   Definition S := unit.
   Definition E := string.
@@ -18,17 +18,16 @@ Module RWSE_params.
 End RWSE_params.
 
 Module M := RWSE RWSE_params.
-Import M.
 
 (* The following definitions are just hardcoded for System F ty *)
 Definition isOpen (sort: string) : bool := true.
 Definition genVarArg (sort: string) : term := nat_q.
 
 (* Returns the constructors of a sort in the spec *)
-Definition constructors (sort: string) : M (list Constructor) :=
-  match AL.M.find sort S.mySigSpec with
-  | Some cs => ret cs
-  | None => error "not found"%string
+Definition constructors (sort: string) : M.t (list Constructor) :=
+  match SFMap.find sort S.mySigSpec with
+  | Some cs => M.pure cs
+  | None => M.error "not found"%string
   end.
 
 (* Generates the type of a variable constructor for a sort
@@ -57,15 +56,15 @@ Definition genConstructor (sort: string) (db: nat) (c: Constructor) : term :=
   mkArrRev up_n_x targetType.
   
 (* Generates a one_inductive_entry which holds the information for a single inductive type for a given sort based on the spec *)
-Definition genOneInductive sort (db: nat) : M one_inductive_entry :=
-  bind (constructors sort) (fun cs =>
+Definition genOneInductive sort (db: nat) : M.t one_inductive_entry :=
+  M.bind (constructors sort) (fun cs =>
         (* introScopeVar *)
         let restNames : list cId := map con_name cs in
         let restTypes := map (genConstructor sort db) cs in
         let '(cnames, ctypes) := if isOpen sort
                                  then (("var_" ++ sort)%string :: restNames, genVar sort db :: restTypes)
                                  else (restNames, restTypes) in
-        ret {|
+        M.pure {|
             mind_entry_typename := sort;
             mind_entry_arity := tSort Universe.type0;
             mind_entry_consnames := cnames;
@@ -76,11 +75,11 @@ Compute genOneInductive "ty"%string 0.
 
 (* Generates a mutual_inductive_entry which combines multiple one_inductive_entry's into a mutual inductive type definition.
  For each sort in the component, a one_inductive_entry is generated *)
-Definition genMutualInductive (component: list cId) : M mutual_inductive_entry :=
+Definition genMutualInductive (component: list cId) : M.t mutual_inductive_entry :=
   (* debruijn indices are counted backwards *)
   let rcomponent := rev component in
-  bind (a_mapi (fun n s => genOneInductive s n) rcomponent) (fun entries =>
-      ret {|
+  M.bind (M.a_mapi (fun n s => genOneInductive s n) rcomponent) (fun entries =>
+      M.pure {|
           mind_entry_record := None;
           mind_entry_finite := Finite;
           mind_entry_params := [];
@@ -92,8 +91,8 @@ Definition genMutualInductive (component: list cId) : M mutual_inductive_entry :
         |}).
 
 Definition mkInductive (component: list cId) : TemplateMonad unit :=
-  match run (genMutualInductive component) S.mySig tt with
-  | inr mind =>
+  match M.run (genMutualInductive component) S.mySig tt with
+  | inr (_, _, mind) =>
     (tmPrint "hello"%string;;
     tmMkInductive mind;;
     tmReturn tt)
