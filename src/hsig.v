@@ -1,7 +1,7 @@
 (* Here I define the spec like that holds all the data for the code we want to generate *)
 Require Import String List.
 Import ListNotations.
-From ASUB Require Import AL.
+From ASUB Require Import AL util.
 
 
 Notation tId := string.
@@ -32,31 +32,27 @@ Definition getArgSorts a :=
   end.
 
 Set Primitive Projections.
-Record Position := mkPosition
-                     { pos_binders : list Binder;
-                       pos_head : ArgumentHead }.
-Record Constructor := mkConstructor
-                        { con_parameters : list (string * tId);
-                          con_name : cId;
-                          con_positions : list Position }.
+Record Position := { pos_binders : list Binder;
+                     pos_head : ArgumentHead }.
+Record Constructor := { con_parameters : list (string * tId);
+                        con_name : cId;
+                        con_positions : list Position }.
 Unset Primitive Projections.
 
 Definition getArgs c :=
   flat_map (fun p => getArgSorts p.(pos_head)) c.(con_positions).
 
+Notation tIdMap elt := (SFMap.t elt).
+Definition Spec := tIdMap (list Constructor).
 
-Notation tIdMap elt := (M.t elt).
-Definition spec := tIdMap (list Constructor).
+Record Signature := { sigSpec : Spec;
+                      sigSubstOf : tIdMap (list tId);
+                      sigComponents : list (list tId);
+                      sigIsOpen : SSet.t;
+                      sigArguments: tIdMap (list tId);
+                    }.
 
-Record signature := mkSig {
-                        sigSpec : spec;
-                        sigSubstOf : tIdMap (list tId);
-                        sigComponents : list (list tId);
-                        sigIsOpen : list tId;
-                        sigArguments: tIdMap (list tId);
-                      }.
-
-Definition t := signature.
+Definition t := Signature.
 
 Scheme Equality for string.
 Scheme Equality for Binder.
@@ -81,7 +77,7 @@ Module Hsig_example.
   #[ local ]
    Open Scope string.
   
-  Definition mySigSpec : spec := AL.fromList
+  Definition mySigSpec : Spec := SFMap.fromList
                                    [ ("vl", [ {| con_parameters := [];
                                                  con_name := "lam";
                                                  con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |}
@@ -111,14 +107,14 @@ Module Hsig_example.
   (* Compute M.find "ty"%string (M.empty _). *)
   (* Compute M.find "ty"%string mySigSpec. *)
 
-  Definition mySig : signature := {|
+  Definition mySig : Signature := {|
     sigSpec := mySigSpec;
-    sigSubstOf := AL.fromList [ ("tm", ["ty"; "vl"])
+    sigSubstOf := SFMap.fromList [ ("tm", ["ty"; "vl"])
                                 ; ("ty", ["ty"])
                                 ; ("vl", ["ty"; "vl"]) ];
     sigComponents := [ [ "ty" ]; [ "tm"; "vl" ] ];
-    sigIsOpen := [ "ty"; "vl" ];
-    sigArguments := AL.fromList [ ("tm", [ "tm"; "ty"; "vl" ])
+    sigIsOpen := SSet.add "ty" (SSet.add "vl" SSet.empty);
+    sigArguments := SFMap.fromList [ ("tm", [ "tm"; "ty"; "vl" ])
                                   ; ("ty", [ "ty" ])
                                   ; ("vl", [ "ty"; "tm" ]) ];
     |}.
