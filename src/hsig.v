@@ -1,8 +1,7 @@
 (* Here I define the spec like that holds all the data for the code we want to generate *)
 Require Import String List.
 Import ListNotations.
-From ASUB Require Import AL util.
-
+From ASUB Require Import AL utils.
 
 Notation tId := string.
 Notation vId := string.
@@ -113,7 +112,7 @@ Module Hsig_example.
                                 ; ("ty", ["ty"])
                                 ; ("vl", ["ty"; "vl"]) ];
     sigComponents := [ [ "ty" ]; [ "tm"; "vl" ] ];
-    sigIsOpen := SSet.add "ty" (SSet.add "vl" SSet.empty);
+    sigIsOpen := SSet.fromList ["ty"; "vl"];
     sigArguments := SFMap.fromList [ ("tm", [ "tm"; "ty"; "vl" ])
                                   ; ("ty", [ "ty" ])
                                   ; ("vl", [ "ty"; "tm" ]) ];

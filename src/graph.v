@@ -1,6 +1,6 @@
 Require Import Structures.OrderedTypeEx List Arith String.
 Import ListNotations.
-From ASUB Require Import util AL.
+From ASUB Require Import utils AL.
 Require Import Structures.OrderedTypeEx.
 Require FSets.FMapList.
 
@@ -14,10 +14,9 @@ Module Digraph.
 
   Definition adj_In_dec := List.In_dec String_as_OT.eq_dec.
 
-  (* a.d. TODO can we *)
-  Definition empty : t := SFMap.empty elt.
+  Definition empty : t := SFMap.empty.
 
-  Definition get (g: t) (v: vertex) : option elt := SFMap.find v g.
+  Definition get (g: t) (v: vertex) : option elt := SFMap.find g v.
   Definition succ (g: t) (v: vertex) : option (list vertex) :=
     match get g v with
     | None => None
@@ -25,11 +24,11 @@ Module Digraph.
     end.
 
   Definition add_vertex (g: t) (v: vertex) (adj: SSet.t) : t :=
-    match SFMap.find v g with
-    | None => SFMap.add v adj g
+    match SFMap.find g v with
+    | None => SFMap.add g v adj
     (* a.d. DONE, uniquify lists since vertex is dec. But this should not introduce errors.
      It did introduce errors in sigAnalyzer.v when building the argument mapping *)
-    | Some adj' => SFMap.add v (SSet.union adj adj') g
+    | Some adj' => SFMap.add g v (SSet.union adj adj')
     end.
 
   Definition add_edge (g: t) (v w: vertex) : t :=
@@ -40,7 +39,7 @@ Module Digraph.
   Definition mem_edge (g: t) (v w: vertex) : bool :=
     match get g v with
     | None => false
-    | Some adj => SSet.mem w adj
+    | Some adj => SSet.mem adj w
     end.
 
   Definition fold {A: Type} (g: t) (f: vertex -> elt -> A -> A) (state: A) :=
@@ -56,7 +55,7 @@ Module Digraph.
 
   Definition fold_pred {A: Type} (g: t) (f: vertex -> A -> A) (v: vertex) (init: A) :=
     SFMap.fold (fun v_pred adj a =>
-               if SSet.mem v adj
+               if SSet.mem adj v
                then (* v_pred is a predecessor of v *)
                  f v_pred a
                else

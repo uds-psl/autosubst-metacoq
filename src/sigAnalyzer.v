@@ -1,4 +1,4 @@
-From ASUB Require Import hsig graph AL monad util.
+From ASUB Require Import hsig graph AL monad utils.
 Require Import List String.
 Import ListNotations.
 Open Scope string.
@@ -27,7 +27,7 @@ Definition binder_analysis (spec: Spec) (occurs_in: G.vertex -> G.vertex -> bool
                                       let vacuous := list_none (fun arg => occurs_in arg bound_sort) (getArgSorts pos_head) in
                                       if vacuous
                                       then error "vacuous!"
-                                      else pure (SSet.add bound_sort bs))
+                                      else pure (SSet.add bs bound_sort))
                                    binders mbs1
                       )
                       positions mbs0)
@@ -35,7 +35,7 @@ Definition binder_analysis (spec: Spec) (occurs_in: G.vertex -> G.vertex -> bool
 
 Definition subordination (g: G.t) (canonical_order: list tId) (open_sorts: SSet.t) : tId -> list tId :=
   fun sort => filter (fun subst_sort =>
-                     (SSet.mem subst_sort open_sorts
+                     (SSet.mem open_sorts subst_sort
                      && G.mem_edge g sort subst_sort)%bool)
                   canonical_order.
 

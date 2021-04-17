@@ -33,15 +33,24 @@ Definition appRef_ name t :=
 Require Import List.
 Import ListNotations.
 
-Fixpoint mapi' {A B: Type} (f: nat -> A -> B) (as_: list A) (n: nat): list B :=
-  match as_ with
+Fixpoint mapi' {A B: Type} (f: nat -> A -> B) (l: list A) (n: nat): list B :=
+  match l with
   | [] => []
-  | a :: as_ =>
-    (f n a) :: (mapi' f as_ (S n))
+  | a :: l =>
+    (f n a) :: mapi' f l (S n)
   end.
 
-Definition mapi {A B: Type} (f: nat -> A -> B) (as_: list A): list B :=
-  mapi' f as_ 0.
+Definition mapi {A B: Type} (f: nat -> A -> B) (l: list A): list B :=
+  mapi' f l 0.
+
+(* map over two lists. No errors! we never call it with lists of different lengths anyways
+ a.d. TODO, certifying function *)
+Fixpoint map2 {A B C: Type} (f: A -> B -> C) (l0: list A) (l1: list B) :=
+  match l0, l1 with
+  | [], _ => []
+  | _, [] => []
+  | a :: l0, b :: l1 => (f a b) :: map2 f l0 l1
+  end.
 
 Fixpoint enumerate' {A: Type} (l: list A) (n: nat) : list (nat * A) :=
   match l with
@@ -102,3 +111,23 @@ End NEList.
 (* (* module for sets of strings *) *)
 (* Module SSet := FSetList.Make String_as_OT. *)
 
+(* cpoied from MetaCoq.Template.utils.MCString *)
+Require DecimalString.
+Definition string_of_nat :=
+  fun n : nat =>
+    DecimalString.NilEmpty.string_of_uint (Nat.to_uint n).
+
+Require Import Arith.
+
+Lemma size_ind {X : Type} (f : X -> nat) (P : X -> Type) :
+  (forall x, (forall y, f y < f x -> P y) -> P x) -> forall x, P x.
+Proof.
+  intros H x. apply H.
+  induction (f x).
+  - intros y. intros []%Nat.nlt_0_r.
+  - intros y Hy. apply H.
+    intros z Hz. apply IHn.
+    apply (Nat.lt_le_trans (f z) (f y) n).
+    + apply Hz.
+    + apply lt_n_Sm_le, Hy.
+Defined.

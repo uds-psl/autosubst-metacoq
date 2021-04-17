@@ -1,4 +1,4 @@
-From ASUB Require Import util.
+From ASUB Require Import utils.
 Require Import List.
 Import ListNotations.
 
@@ -40,29 +40,37 @@ Module RWSE (T: RWSE_params).
   Module Notations.
     Declare Scope rwse_scope.
     
-    Notation "x <- c1 ;; c2" := (bind  c1 (fun x => c2))
+    Notation "x <- c1 ;; c2" := (bind c1 (fun x => c2))
                                (at level 100, c1 at next level, right associativity) : rwse_scope.
-    Notation "c1 ;; c2" := (bind  c1 (fun _ => c2))
+
+    Notation "' pat <- c1 ;; c2" := (bind c1 (fun x => match x with pat => c2 end))
+                                   (at level 100, pat pattern, c1 at next level, right associativity) : rwse_scope.
+    
+    Notation "c1 ;; c2" := (bind c1 (fun _ => c2))
                           (at level 100, right associativity) : rwse_scope.
 
-    (* Bind Scope rwse_scope with M. *)
     (* automatically put scope on top of the stack when this module is imported. *)
     #[ global ]
     Open Scope rwse_scope.
   End Notations.
 
   Import Notations.
-  Definition ask {A: Type} : t T.R :=
+  Definition ask : t T.R :=
     fun r s => inr (T.empty, s, r).
-  Definition asks {A B: Type} : (T.R -> B) -> t B :=
+  Definition asks {A: Type} : (T.R -> A) -> t A :=
     fun f r s => inr (T.empty, s, f r).
 
-  Definition get {A: Type} : t T.S :=
+  Definition get : t T.S :=
     fun _ s => inr (T.empty, s, s).
-  Definition put {A: Type} : T.S -> t unit :=
+  Definition gets {A: Type} : (T.S -> A) -> t A :=
+    fun f _ s => inr (T.empty, s, f s).
+  
+  Definition put : T.S -> t unit :=
     fun s _ _ => inr (T.empty, s, tt).
+  Definition puts : (T.S -> T.S) -> t unit :=
+    fun f _ s => inr (T.empty, f s, tt).
 
-  Definition tell {A: Type} : T.W -> t unit :=
+  Definition tell : T.W -> t unit :=
     fun w _ s => inr (w, s, tt).
 
   Definition error {A: Type} : T.E -> t A :=
@@ -93,6 +101,9 @@ Module RWSE (T: RWSE_params).
 
   Definition a_mapi {A B: Type} : (nat -> A -> t B) -> list A -> t (list B) :=
     fun f as_ => sequence (mapi f as_).
+
+  Definition a_concat_map {A B: Type} : (A -> t (list B)) -> list A -> t (list B) :=
+    fun f as_ => fmap (@List.concat B) (amap f as_).
   
   Fixpoint m_fold_left {A B: Type} (f: A -> B -> t A) (init: A) (bs: list B) : t A :=
     match bs with

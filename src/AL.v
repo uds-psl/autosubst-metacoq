@@ -1,42 +1,50 @@
 Require Import Structures.OrderedType Structures.OrderedTypeEx List String.
 Import ListNotations.
-Require Import FSets.FMapList.
+Require Import FSets.FMapList Arith.
+From ASUB Require Import utils.
 
 Module FMap (X: OrderedType).
-  (* Include FMapList.Make X.  *)
+  (* Finite maps.
+   a.d. TODO remove the ordered constraint because map/fold destroys the sorted invariant anyways and I don't want to run into bugs in the future where I work with unsorted maps *)
 
   Definition key := X.t.
   Definition t (elt: Type) := list (key * elt)%type.
 
-  Definition empty (elt: Type) : t elt := [].
-  Fixpoint add {elt: Type} (k: key) (v: elt) (s: t elt) :=
+  Definition empty {elt: Type} : t elt := [].
+
+  Fixpoint add {elt: Type} (s: t elt) (k: key) (v: elt) : t elt :=
     match s with
     | [] => [(k, v)]
     | (k', v') :: s' =>
       match X.compare k k' with
       | LT _ => (k, v) :: s
       | EQ _ => (k, v) :: s'
-      | GT _ => (k', v') :: add k v s'
+      | GT _ => (k', v') :: add s' k v
       end
     end.
-  Fixpoint mem {elt: Type} (k: key) (s: t elt) :=
+
+  Definition union {elt: Type} (s s': t elt) : t elt :=
+    app s s'.
+  
+  Fixpoint mem {elt: Type} (s: t elt) (k: key) : bool :=
     match s with
     | [] => false
     | (k', _) :: s' =>
       match X.compare k k' with
       | LT _ => false
       | EQ _ => true
-      | GT _ => mem k s'
+      | GT _ => mem s' k
       end
     end.
-  Fixpoint find {elt: Type} (k: key) (s: t elt) : option elt :=
+
+  Fixpoint find {elt: Type} (s: t elt) (k: key) : option elt :=
     match s with
     | [] => None
     | (k', v) :: s' =>
       match X.compare k k' with
       | LT _ => None
       | EQ _ => Some v
-      | GT _ => find k s'
+      | GT _ => find s' k
       end
     end.
 
@@ -61,14 +69,12 @@ Module FMap (X: OrderedType).
   (* a.d. todo, no guarantees about overwriting. I'm using elements -> List.map -> fromList to replace mapi since mapi seems bugged *)
   Fixpoint fromList {elt : Type} (A: list (key * elt)) : t elt :=
     match A with
-    | [] => empty _
-    | (k, v) :: A => add k v (fromList A)
+    | [] => empty
+    | (k, v) :: A => add (fromList A) k v 
     end.
 End FMap. 
 
 Module SFMap := FMap String_as_OT.
-
-Require Import Arith.
 
 Module FSet (X: OrderedType).
 
@@ -81,40 +87,34 @@ Module FSet (X: OrderedType).
 
   Definition singleton (v: elt) : t := [v].
 
-  Fixpoint add (v: elt) (s: t) :=
+  Fixpoint add (s: t) (v: elt) :=
     match s with
     | [] => [v]
     | v' :: s' =>
       match X.compare v v' with
       | LT _ => v :: s
       | EQ _ => s
-      | GT _ => v' :: add v s'
+      | GT _ => v' :: add s' v
       end
     end.
 
-  Fixpoint mem (v: elt) (s: t) :=
+  Fixpoint mem (s: t) (v: elt) :=
     match s with
     | [] => false
     | v' :: s' =>
       match X.compare v v' with
       | LT _ => false
       | EQ _ => true
-      | GT _ => mem v s'
+      | GT _ => mem s' v
       end
     end.
 
-  Lemma size_ind {X : Type} (f : X -> nat) (P : X -> Type) :
-    (forall x, (forall y, f y < f x -> P y) -> P x) -> forall x, P x.
-  Proof.
-    intros H x. apply H.
-    induction (f x).
-    - intros y. intros []%Nat.nlt_0_r.
-    - intros y Hy. apply H.
-      intros z Hz. apply IHn.
-      apply (Nat.lt_le_trans (f z) (f y) n).
-      + apply Hz.
-      + apply lt_n_Sm_le, Hy.
-  Defined.
+  Fixpoint fromList (l: list elt) :=
+    match l with
+    | [] => empty
+    | v :: l =>
+      add (fromList l) v
+    end.
 
   Fixpoint card (s: t) : nat :=
     match s with
