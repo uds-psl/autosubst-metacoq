@@ -1,5 +1,5 @@
 
-From ASUB Require Import AL hsig quotes utils termutil monad tmUtils.
+From ASUB Require Import AL hsig quotes utils dbmap termutil monad tmUtils.
 From MetaCoq.Template Require Import All.
 Require Import List String.
 Import ListNotations MonadNotation.
@@ -14,6 +14,7 @@ Definition env_state env := {| st_names := []; st_env := env |}.
 
 Definition update_env (env env' : SFMap.t term) : SFMap.t term :=
   SFMap.union env env'.
+
 
 Definition locate_name (name: string) : TemplateMonad (string * term) :=
   loc <- tmLocate1 name;;
@@ -60,6 +61,9 @@ Module GenM.
     | None => error (String.append "Not found: " s)
     | Some t => pure t
     end.
+
+  Definition testrun (env: SFMap.t term) (mv: t term) :=
+    run mv Hsig_example.mySig (env_state env).
 End GenM.
   
 Module inductives.
@@ -112,7 +116,7 @@ Module inductives.
   Definition genOneInductive sort (db: nat) : t one_inductive_entry :=
     ctors <- constructors sort;;
     (* introScopeVar *)
-    let ctor_names : list cId := map con_name ctors in
+    let ctor_names := map con_name ctors in
     let ctor_types := map (genConstructor sort db) ctors in
     let '(ctor_names, ctor_types) :=
         if isOpen sort
@@ -127,7 +131,7 @@ Module inductives.
         mind_entry_lc := ctor_types 
       |}.
 
-  (* Compute genOneInductive "ty"%string 0. *)
+  Eval hnf in genOneInductive "ty"%string 0.
 
   (* Generates a mutual_inductive_entry which combines multiple one_inductive_entry's into a mutual inductive type definition.
  For each sort in the component, a one_inductive_entry is generated *)
@@ -150,8 +154,8 @@ End inductives.
 
 Import inductives.
 
-Definition mkInductive (component: list cId) : TemplateMonad (SFMap.t term) :=
-  match GenM.run (genMutualInductive component) Hsig_example.mySig empty_state with
+Definition mkInductive (env: SFMap.t term) (component: list cId) : TemplateMonad (SFMap.t term) :=
+  match GenM.run (genMutualInductive component) Hsig_example.mySig (env_state env) with
   | inr (_, state, mind) =>
     (tmMkInductive mind;;
      tm_update_env state)
@@ -162,31 +166,6 @@ Definition mkInductive (component: list cId) : TemplateMonad (SFMap.t term) :=
 
 Module congruences.
   Import GenM GenM.Notations.
-
-  Definition eq_ ty t0 t1 := tApp eq_q [ty; t0; t1].
-  
-  Definition lambda_ (bname: string) (ty body: term) :=
-    tLambda {| binder_name := nNamed bname; binder_relevance := Relevant |} ty body.
-  
-  Fixpoint add_binders (bs: list (string * term)): term -> term :=
-    match bs with
-    | [] => fun t => t
-    | (bname, btype) :: bs =>
-      fun t => lambda_ bname btype (add_binders bs t)
-    end.
-
-  Definition dbmap_empty : tId -> nat := fun _ => 666.
-  Definition dbmap_add (s: tId) (dbmap: tId -> nat) :=
-    fun s' =>
-      if eqb s s' then 0
-      else S (dbmap s').
-  Fixpoint dbmap_adds (ss: list tId) (dbmap: tId -> nat) :=
-    match ss with
-    | [] => dbmap
-    | s :: ss =>
-      dbmap_adds ss (dbmap_add s dbmap)
-    end.
-  Definition dbmap_get (dbmap: tId -> nat) (s: tId) : term := tRel (dbmap s).
 
   Definition getArgType (p: Position) : t term :=
     let '{| pos_binders := _;
@@ -221,50 +200,54 @@ Module congruences.
     (* body of the lemma *)
     (* the last implicit argument to eq_trans will always be the same *)
     let impl2 := tApp ctor_tm (map (dbmap_get dbmap) ts) in
-    let (_, proof') := fold_right (fun '(s, t, H) '(i, tm) =>
-                                    let impl0 := tApp ctor_tm (map (dbmap_get dbmap) (firstn (i - 1) ts ++ skipn (i - 1) ss)) in
-                                    let impl1 := tApp ctor_tm (map (dbmap_get dbmap) (firstn i ts ++ skipn i ss)) in
-                                    let feq_dbmap := dbmap_add "x" dbmap in
-                                    let feq_args := (map (dbmap_get feq_dbmap) (firstn (i - 1) ts ++ ["x"] ++ skipn i ss)) in
-                                    let feq_lam := lambda_ "x" hole (tApp ctor_tm feq_args) in
-                                    let feq := tApp f_equal_q [sort_tm; sort_tm; feq_lam; dbmap_get dbmap s; dbmap_get dbmap t; dbmap_get dbmap H] in
-                                    (i - 1, tApp eq_trans_q [sort_tm; impl0; impl1; impl2; feq; tm])
-                                 )
-                                 (List.length con_positions, tApp eq_refl_q [sort_tm; impl2]) (combine (combine ss ts) Hs) in
+    let (_, proof') := fold_right
+                         (fun '(s, t, H) '(i, tm) =>
+                            let impl0 := tApp ctor_tm (map (dbmap_get dbmap) (firstn (i - 1) ts ++ skipn (i - 1) ss)) in
+                            let impl1 := tApp ctor_tm (map (dbmap_get dbmap) (firstn i ts ++ skipn i ss)) in
+                            let feq_dbmap := dbmap_add "x" dbmap in
+                            let feq_args := (map (dbmap_get feq_dbmap) (firstn (i - 1) ts ++ ["x"] ++ skipn i ss)) in
+                            let feq_lam := lambda_ "x" hole (tApp ctor_tm feq_args) in
+                            let feq := tApp f_equal_q [sort_tm; sort_tm; feq_lam; dbmap_get dbmap s; dbmap_get dbmap t; dbmap_get dbmap H] in
+                            (i - 1, tApp eq_trans_q [sort_tm; impl0; impl1; impl2; feq; tm]))
+                         (List.length con_positions, tApp eq_refl_q [sort_tm; impl2])
+                         (combine (combine ss ts) Hs) in
     (* generate and register lemma name *)
     let lemma_name := String.append "congr_" con_name in
     register_name lemma_name;;
     pure (lemma_name, proof proof').
 
-  Definition myctor := {| con_parameters := [];
-                          con_name := "arr";
-                          con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |};
-                                           {| pos_binders := []; pos_head := Atom "ty" |} ] |}.
 
   (* generates the terms for the congruence lemmas of the
      constructors of an inductive type *)
-  (* Definition genCongruences (env: string -> t term) (sort: tId) : t (list (string * term)) := *)
-  (*   ctors <- constructors sort;; *)
-  (*   amap (genCongruence env sort) ctors. *)
+  Definition genCongruences (sort: tId) : t (list (string * term)) :=
+    ctors <- constructors sort;;
+    amap (genCongruence sort) ctors.
 
 End congruences.
 
 Import congruences.
 
-Definition mkCongruences (env: SFMap.t term) (sort: tId) : TemplateMonad (SFMap.t term) :=
-  match GenM.run (genCongruence sort myctor) Hsig_example.mySig (env_state env) with
+Definition mkLemma '(lname, lbody) : TemplateMonad unit :=
+  body <- tmUnquote lbody;;
+  body <- tmEval lazy (my_projT2 body);;
+  tmDefinitionRed lname (Some TemplateMonad.Common.all) body;;
+  tmReturn tt.
+
+Definition mkCongruences (s: Signature) (env: SFMap.t term) (sort: tId) : TemplateMonad (SFMap.t term) :=
+  match GenM.run (genCongruences sort) s (env_state env) with
   | inl e => tmFail e
-  | inr (_, state, (lname, t)) =>
-    body <- tmUnquote t;;
-    body <- tmEval lazy (my_projT2 body);;
-    tmDefinitionRed lname (Some TemplateMonad.Common.all) body;;
+  | inr (_, state, lemmas) =>
+    tm_mapM mkLemma lemmas;; 
     tm_update_env state
   end. 
 
+Definition initial_env := SFMap.fromList [("nat", nat_q)].
 
 Definition generate (component: list tId) : TemplateMonad (SFMap.t term) :=
-  env <- mkInductive component;;
-  env <- mkCongruences env "ty";;
+  let env := initial_env in
+  let s := Hsig_example.mySig in
+  env <- mkInductive env component;;
+  env <- mkCongruences s env "ty";;
   tmReturn env.
 
 MetaCoq Run (generate ["ty"] >>= tmEval lazy >>= tmPrint).
