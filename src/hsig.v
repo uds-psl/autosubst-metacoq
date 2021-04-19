@@ -30,13 +30,11 @@ Definition getArgSorts a :=
   (* | FunApp _ xs => flat_map getArgSorts xs *)
   end.
 
-Set Primitive Projections.
 Record Position := { pos_binders : list Binder;
                      pos_head : ArgumentHead }.
 Record Constructor := { con_parameters : list (string * tId);
                         con_name : cId;
                         con_positions : list Position }.
-Unset Primitive Projections.
 
 Definition getArgs c :=
   flat_map (fun p => getArgSorts p.(pos_head)) c.(con_positions).
@@ -56,7 +54,10 @@ Definition t := Signature.
 Scheme Equality for string.
 Scheme Equality for Binder.
 Scheme Equality for ArgumentHead.
-(* a.d. TODO, scheme equality issues im bugtracker, ggf neues Issue *)
+(* a.d. DONE, scheme equality issues im bugtracker, ggf neues Issue
+ * originally did not work b/c Position was declared with primitive projections.
+ * but even without them Scheme Equality does not like list Binder
+ * Jason Gross hat dafuer schon ein Issue erstellt *)
 (* Scheme Equality for Position. *)
 
 Notation eq_dec A := (forall x y:A, { x = y } + { x <> y }).
