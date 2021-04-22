@@ -1,16 +1,18 @@
 -Q . ASUB
 
+src/IdentParsing.v
 src/utils.v
 src/tmUtils.v
 src/AL.v
 src/hsig.v
 src/HOASParser.v
+src/HOASCustomParser.v
+src/phoas.v
 src/quotes.v
 src/termutil.v
 src/monad.v
 src/graph.v
 src/sigAnalyzer.v
-src/phoas.v
 src/dbmap.v
 src/generator.v
 
