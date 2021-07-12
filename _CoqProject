@@ -1,26 +1,42 @@
 -Q . ASUB
 
-src/IdentParsing.v
-src/utils.v
-src/tmUtils.v
-src/AL.v
-src/hsig.v
-src/HOASParser.v
-src/HOASCustomParser.v
-src/phoas.v
-src/quotes.v
-src/termutil.v
-src/monad.v
-src/graph.v
-src/sigAnalyzer.v
-src/dbmap.v
-src/generator.v
+listimport/samefile.v
+listimport/importfile1.v
+listimport/importfile2.v
+listimport/localimport1.v
+listimport/localimport2.v
+
+src/static/core.v
+src/static/fintype.v
+src/static/unscoped.v
+src/static/fcbv_unscoped.v
+
+src/parsers/IdentParsing.v
+src/Utils.v
+src/NEList.v
+src/Names.v
+src/TemplateMonadUtils.v
+src/AssocList.v
+src/Language.v
+# src/parsers/NotationParser.v
+# src/parsers/CustomEntryParser.v
+# src/parsers/InductiveParser.v
+src/Quotes.v
+src/Termutil.v
+src/Monad.v
+src/ErrorM.v
+src/GenM.v
+src/Graph.v
+src/SigAnalyzer.v
+src/DeBruijnMap.v
+src/GallinaGen.v
+src/CodeGenerator.v
 
 # src/testimport.v
 
-pathologic_graphs/pathologic_graph_5_3.v
-pathologic_graphs/pathologic_graph_10_2.v
-pathologic_graphs/pathologic_graph_10_3.v
-pathologic_graphs/pathologic_graph_10_4.v
-pathologic_graphs/pathologic_graph_12_3.v
-pathologic_graphs/pathologic_graph_14_3.v
+# pathologic_graphs/pathologic_graph_5_3.v
+# pathologic_graphs/pathologic_graph_10_2.v
+# pathologic_graphs/pathologic_graph_10_3.v
+# pathologic_graphs/pathologic_graph_10_4.v
+# pathologic_graphs/pathologic_graph_12_3.v
+# pathologic_graphs/pathologic_graph_14_3.v

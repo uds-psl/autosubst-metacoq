@@ -1,3 +1,4 @@
+(** * Module to parse HOAS using custom entry notations *)
 From ASUB Require Import hsig.
 Require Import List String.
 (* Import ListNotations. *)
@@ -68,5 +69,5 @@ Module HOASNotation.
                              app : tm -> tm -> tm;
                              lam : (tm -> tm) -> tm }}.
   Check bla_ctors.
-  
+End HOASNotation. 
 

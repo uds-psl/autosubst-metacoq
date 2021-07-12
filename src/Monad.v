@@ -1,12 +1,13 @@
-From ASUB Require Import utils.
 Require Import List.
 Import ListNotations.
 
-Module Type RWSE_params.
+From ASUB Require Import Utils.
+
+Module Type RWSEParams.
   Parameter R W S E : Type.
   Parameter empty : W.
   Parameter append : W -> W -> W.
-End RWSE_params.
+End RWSEParams.
 
 (* Module Type RWSE_T. *)
 (*   Parameter M : Type -> Type. *)
@@ -14,7 +15,7 @@ End RWSE_params.
 
 (* End RWSE_T. *)
 
-Module RWSE (T: RWSE_params).
+Module RWSE (T: RWSEParams).
   Definition t (A: Type) := T.R -> T.S -> T.E + (T.W * T.S * A).
 
   Definition join {A: Type} : t (t A) -> t A :=
@@ -27,16 +28,19 @@ Module RWSE (T: RWSE_params).
                 | inr (w', s'', a) => inr (T.append w w', s'', a)
                 end
               end.
+
   Definition bind {A B: Type} : t A -> (A -> t B) -> t B :=
     fun ma f => fun r s =>
                match ma r s with
                | inl e => inl e
                | inr (w, s', a) => f a r s'
                end.
-  Definition pure {A: Type} : A -> t A :=
-    fun a r s => inr (T.empty, s, a).
+  
+  Definition pure {A: Type} : A -> t A := fun a r s => inr (T.empty, s, a).
+
   Definition run {A: Type} : t A -> T.R -> T.S -> T.E + (T.W * T.S * A) := fun ma => ma.
 
+  (* taken form the notations of the TemplateMonad *)
   Module Notations.
     Declare Scope rwse_scope.
     
@@ -55,6 +59,7 @@ Module RWSE (T: RWSE_params).
   End Notations.
 
   Import Notations.
+
   Definition ask : t T.R :=
     fun r s => inr (T.empty, s, r).
   Definition asks {A: Type} : (T.R -> A) -> t A :=
@@ -96,14 +101,33 @@ Module RWSE (T: RWSE_params).
       pure (a :: as_)
     end.
   
-  Definition amap {A B: Type} : (A -> t B) -> list A -> t (list B) :=
+  Definition a_map {A B: Type} : (A -> t B) -> list A -> t (list B) :=
     fun f as_ => sequence (map f as_).
+
+  Fixpoint a_map2 {A B C: Type} (f: A -> B -> t C) (l0: list A) (l1: list B) : t (list C) :=
+    match l0, l1 with
+    | a::l0, b::l1 =>
+      c <- f a b;;
+      cs <- a_map2 f l0 l1;;
+      pure (c::cs)
+    | [], _ => pure []
+    | _, [] => pure []
+    end.
 
   Definition a_mapi {A B: Type} : (nat -> A -> t B) -> list A -> t (list B) :=
     fun f as_ => sequence (mapi f as_).
 
+  Fixpoint a_filter {A: Type} (f: A -> t bool) (xs: list A) : t (list A) :=
+    match xs with
+    | [] => pure []
+    | x :: xs =>
+      b <- f x;;
+      fxs <- a_filter f xs;;
+      if b then pure (x :: fxs) else pure fxs
+    end.
+  
   Definition a_concat_map {A B: Type} : (A -> t (list B)) -> list A -> t (list B) :=
-    fun f as_ => fmap (@List.concat B) (amap f as_).
+    fun f as_ => fmap (@List.concat B) (a_map f as_).
   
   Fixpoint m_fold_left {A B: Type} (f: A -> B -> t A) (init: A) (bs: list B) : t A :=
     match bs with
@@ -122,16 +146,3 @@ Module RWSE (T: RWSE_params).
     end.
 End RWSE.
 
-Require Import String.
-(* a.d. TODO, only really need error monad here. Write other monad variants. *)
-Module EParams. 
-  Definition R := unit.
-  Definition W := unit.
-  Definition S := unit.
-  Definition E := string.
-
-  Definition append := fun (_ _: unit) => tt.
-  Definition empty := tt.
-End EParams.
-
-Module E := RWSE EParams.

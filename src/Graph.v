@@ -1,8 +1,8 @@
 Require Import Structures.OrderedTypeEx List Arith String.
 Import ListNotations.
-From ASUB Require Import utils AL.
-Require Import Structures.OrderedTypeEx.
-Require FSets.FMapList.
+
+From ASUB Require Import Utils AssocList.
+From ASUB Require NEList.
 
 
 Module Digraph.
@@ -72,7 +72,9 @@ Module Digraph.
     
   Definition transitive_closure (g: t) (refl: bool) := fold_vertex g (transitive_closure' refl) g.
 
-  Definition scc_list (g: t) :=
+  (** Naive implementation of an algorithm to compute the strongly connected components
+   ** TODO document *)
+  Definition scc_list (g: t) : list (NEList.t vertex) :=
     let gt := transitive_closure g false in
     let sccs := fold_vertex gt (fun v sccs =>
                                   let '(added, sccs) :=
@@ -89,6 +91,14 @@ Module Digraph.
                                   then sccs else (v, []) :: sccs)
                      [] in
     sccs.
+
+  (** Invert the graph, i.e. flip all edges.
+   ** This can be done by folding over the graph to get all vertices with their successors
+   ** and then folding over the successors to add them to an empty graph in the inverse direction. *)
+  Definition invert (g: t) : t :=
+    fold g (fun v adj g0 =>
+              fold_left (fun g1 v__succ => add_edge g1 v__succ v) adj g0
+           ) empty.
 End Digraph.
 
 Module Ex.
@@ -101,6 +111,9 @@ Module Ex.
                                 "a" "b")
                     "b" "c".
   Definition gt := G.transitive_closure g true.
+  Eval cbv in (G.mem_edge g "b" "c").
+  Compute g.
+  Compute gt.
   
   Compute (G.mem_edge gt "a" "c").
 End Ex.

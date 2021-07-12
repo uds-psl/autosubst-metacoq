@@ -1,4 +1,4 @@
-
+(** * Module to parse HOAS using normal Notation commands *)
 Require Import List String.
 Import ListNotations.
 From ASUB Require Import hsig AL monad sigAnalyzer.

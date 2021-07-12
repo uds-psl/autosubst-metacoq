@@ -75,11 +75,38 @@ Proof.
   - exfalso. apply (nth_error_Some l n); assumption.
 Defined.
   
-Fixpoint list_none {A: Type} (f: A -> bool) (l: list A) : bool :=
+Fixpoint list_nonef {A: Type} (f: A -> bool) (l: list A) : bool :=
   match l with
   | [] => true
   | a :: l =>
-    negb (f a) && list_none f l
+    negb (f a) && list_nonef f l
+  end.
+
+Fixpoint list_anyf {A: Type} (f: A -> bool) (l: list A) : bool :=
+  match l with
+  | [] => false
+  | a :: l =>
+    (f a) || list_anyf f l
+  end.
+
+Fixpoint list_none (l: list bool) : bool :=
+  match l with
+  | [] => true
+  | b :: l =>
+    (negb b) || list_none l
+  end.
+
+Fixpoint list_any (l: list bool) : bool :=
+  match l with
+  | [] => false
+  | b :: l =>
+    b || list_any l
+  end.
+
+Definition list_empty {A: Type} (l: list A) : bool :=
+  match l with
+  | [] => true
+  | _ => false
   end.
 
 Require Import String.
@@ -96,13 +123,39 @@ Fixpoint list_mem (s: string) (l: list string) : bool :=
 Definition list_intersection (l0 l1: list string) : list string :=
   filter (fun s0 => list_mem s0 l1) l0.
 
-Module NEList.
-  Definition t (A: Type) := (A * list A)%type.
+Definition list_diff (l0 l1: list string) : list string :=
+  filter (fun s0 => negb (list_mem s0 l1)) l0.
 
-  Definition to_list {A: Type} (ne: t A) :=
-    let '(v, l) := ne in
-    v :: l.
-End NEList.
+(* TODO put all the list helper functions into a module so I don't have to duplicate that here *)
+Fixpoint list_mem_prod (s: string * string) (l: list (string * string)) : bool :=
+  let '(s0, s1) := s in
+  match l with
+  | [] => false 
+  | (s0', s1') :: l' =>
+    if andb (eqb s0 s0') (eqb s1 s1')
+    then true
+    else list_mem_prod s l'
+  end.
+    
+Definition list_diff_prod (l0 l1: list (string * string)) : list (string * string) :=
+  filter (fun s => negb (list_mem_prod s l1)) l0.
+
+Fixpoint list_filter_map {A B: Type} (f: A -> option B) (l: list A) : list B :=
+  match l with
+  | [] => []
+  | a :: l =>
+    let fa := f a in
+    match fa with
+    | None => list_filter_map f l
+    | Some b => b :: (list_filter_map f l)
+    end
+  end.
+
+Definition cartesian_product {A: Type} (xs ys: list A) : list (A * A) :=
+  fold_left (fun c x =>
+               let pairs := map (fun y => (x, y)) ys in
+               app c pairs)
+            xs [].
 
 (* Require Import Structures.OrderedTypeEx FSets.  *)
 (* (* a.d. TODO I would rather use MSets instead of FSets since they are recommended but MSets uses a different OrderedType module and there is no String_as_OT for it *) *)
@@ -111,7 +164,7 @@ End NEList.
 (* (* module for sets of strings *) *)
 (* Module SSet := FSetList.Make String_as_OT. *)
 
-(* cpoied from MetaCoq.Template.utils.MCString *)
+(* copied from MetaCoq.Template.utils.MCString *)
 Require DecimalString.
 Definition string_of_nat :=
   fun n : nat =>
@@ -119,6 +172,7 @@ Definition string_of_nat :=
 
 Require Import Arith.
 
+(* Has to be defined because I use in in AssocList to compute the union of a set *)
 Lemma size_ind {X : Type} (f : X -> nat) (P : X -> Type) :
   (forall x, (forall y, f y < f x -> P y) -> P x) -> forall x, P x.
 Proof.
@@ -131,3 +185,6 @@ Proof.
     + apply Hz.
     + apply lt_n_Sm_le, Hy.
 Defined.
+
+(** * hole to use in incomplete definitions *)
+Axiom undefined : forall {A:Type}, A.

@@ -1,3 +1,4 @@
+(** * Module to parse HOAS by quoting inductive types with MetaCoq *)
 From MetaCoq.Template Require Import All.
 Require Import String List Arith.
 Import ListNotations MonadNotation.
@@ -317,3 +318,44 @@ Definition tmInternalizeInductives (slist: list Type) (vlist: list (Type * Type)
 
 MetaCoq Run (tmInternalizeInductives m3.Autosubst_sorts m3.Autosubst_map >>= tmPrint).
 
+
+Definition HOASArrow (A:Type) (B: Type) := (A * B)%type.
+
+Notation "A ~> B" := (HOASArrow A B) (at level 80, right associativity).
+
+Inductive tm :=
+  | app : tm -> tm -> tm
+  | lam : (tm ~> tm) -> tm.
+
+Definition foo :=
+  fun a b:nat => a = b.
+
+MetaCoq Quote Definition foo_source :=  Eval cbv in foo.
+
+MetaCoq Run (get_inductive_mbodies [tm] >>= tmPrint).
+
+(*   [{|
+        ind_name := "tm";
+        ind_type :=
+          tSort
+            (Universe.from_kernel_repr (Level.lSet, false)
+               [(Level.Level "ASUB.src.phoas.533", false);
+               (Level.Level "ASUB.src.phoas.534", false)]);
+        ind_kelim := IntoAny;
+        ind_ctors :=
+          [("app",
+           tProd
+             {| binder_name := nAnon; binder_relevance := Relevant |}
+             (tRel 0)
+             (tProd
+                {| binder_name := nAnon; binder_relevance := Relevant |}
+                (tRel 1) (tRel 2)), 2);
+          ("lam",
+          tProd {| binder_name := nAnon; binder_relevance := Relevant |}
+            (tApp
+               (tConst (MPfile ["phoas"; "src"; "ASUB"], "HOASArrow") [])
+               [tRel 0; tRel 0]) (tRel 1), 1)];
+        ind_projs := [];
+        ind_relevance := Relevant
+      |}];
+*)

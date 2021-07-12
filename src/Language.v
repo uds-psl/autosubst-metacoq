@@ -1,0 +1,199 @@
+(* Here I define the spec like that holds all the data for the code we want to generate *)
+Require Import String List.
+Import ListNotations.
+From ASUB Require Import AssocList Utils NEList.
+From MetaCoq.Template Require Import All.
+
+Notation tId := string.
+Notation vId := string.
+Notation fId := string.
+Notation cId := string.
+
+Inductive Binder :=
+| Single : tId -> Binder.
+(* | BinderList : string -> tId -> Binder. *)
+
+Inductive ArgumentHead :=
+| Atom : tId -> ArgumentHead
+| FunApp : fId -> option term -> list ArgumentHead -> ArgumentHead.
+  
+Definition getBinders b :=
+  match b with
+  | Single x => [x]
+  (* | BinderList _ x => [x] *)
+  end.
+
+Fixpoint getArgSorts (a: ArgumentHead) : list tId :=
+  match a with
+  | Atom x => [x]
+  | FunApp _ _ xs => flat_map getArgSorts xs
+  end.
+
+Record Position := { pos_binders : list Binder;
+                     pos_head : ArgumentHead }.
+Record Constructor := { con_parameters : list (string * tId);
+                        con_name : cId;
+                        con_positions : list Position }.
+
+Definition getArgs c :=
+  flat_map (fun p => getArgSorts p.(pos_head)) c.(con_positions).
+
+Definition Spec := SFMap.t (list Constructor).
+
+(* Return all sorts that are bound in a constructor of a sort in the given component *)
+Definition getBoundSorts (spec: Spec) (component: NEList.t tId) : list tId :=
+  let constructors := flat_map (fun sort => match SFMap.find spec sort with
+                                         | None => []
+                                         | Some ctors => ctors
+                                         end) (NEList.to_list component) in
+  let binders := flat_map (fun ctor =>
+                             flat_map (fun position =>
+                                         flat_map getBinders position.(pos_binders))
+                                      ctor.(con_positions))
+                          constructors in
+  binders.
+
+Record Signature := { sigSpec : Spec;
+                      sigSubstOf : SFMap.t (list tId);
+                      sigComponents : list (NEList.t tId);
+                      sigIsOpen : SSet.t;
+                      sigArguments: SFMap.t (list tId);
+                      sigRenamings : SSet.t;
+                    }.
+
+Definition t := Signature.
+
+Scheme Equality for string.
+Scheme Equality for Binder.
+(* Scheme Equality for ArgumentHead. *)
+
+
+(* a.d. DONE, scheme equality issues im bugtracker, ggf neues Issue
+ * originally did not work b/c Position was declared with primitive projections.
+ * but even without them Scheme Equality does not like list Binder
+ * Jason Gross hat dafuer schon ein Issue erstellt *)
+(* Scheme Equality for Position. *)
+
+Notation eq_dec A := (forall x y:A, { x = y } + { x <> y }).
+(* TODO I think for this I would need the stronger induction lemma *)
+(* Lemma ArgumenHead_eq_dec : eq_dec ArgumentHead. *)
+(* Proof. *)
+(* Admitted. *)
+
+(* Lemma Position_eq_dec : eq_dec Position. *)
+(* Proof. *)
+(*   repeat (decide equality). *)
+(* Qed. *)
+
+
+(* Lemma Constructor_eq_dec : eq_dec Constructor. *)
+(* Proof. *)
+(*   repeat (decide equality). *)
+(* Qed. *)
+
+Module Hsig_example.
+  #[ local ]
+   Open Scope string.
+  
+  Definition mySigSpec : Spec := SFMap.fromList
+                                   [ ("vl", [ {| con_parameters := [];
+                                                 con_name := "lam";
+                                                 con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |}
+                                                                 ; {| pos_binders := [ Single "vl" ]; pos_head := Atom "tm" |} ] |}
+                                              ; {| con_parameters := [];
+                                                   con_name := "tlam";
+                                                   con_positions := [ {| pos_binders := [ Single "ty" ]; pos_head := Atom "tm" |} ] |} ])
+                                     ; ("tm", [ {| con_parameters := [];
+                                                   con_name := "app";
+                                                   con_positions := [ {| pos_binders := []; pos_head := Atom "tm" |}
+                                                                   ; {| pos_binders := []; pos_head := Atom "tm" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "tapp";
+                                                     con_positions := [ {| pos_binders := []; pos_head := Atom "tm" |}
+                                                                     ; {| pos_binders := []; pos_head := Atom "ty" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "vt";
+                                                     con_positions := [ {| pos_binders := []; pos_head := Atom "vl" |} ] |} ])
+                                     ; ("ty", [ {| con_parameters := [];
+                                                   con_name := "arr";
+                                                   con_positions := [ {| pos_binders := []; pos_head := Atom "ty" |}
+                                                                   ; {| pos_binders := []; pos_head := Atom "ty" |} ] |}
+                                                ; {| con_parameters := [];
+                                                     con_name := "all";
+                                                     con_positions := [ {| pos_binders := [ Single "ty" ]; pos_head := Atom "ty" |} ] |} ]) ].
+
+  (* Compute M.find "ty"%string (M.empty _). *)
+  (* Compute M.find "ty"%string mySigSpec. *)
+
+  Definition mySig : Signature := {|
+    sigSpec := mySigSpec;
+    sigSubstOf := SFMap.fromList [ ("tm", ["ty"; "vl"])
+                                ; ("ty", ["ty"])
+                                ; ("vl", ["ty"; "vl"]) ];
+    sigComponents := [ ("ty", []); ("tm", [ "vl" ]) ];
+    sigIsOpen := SSet.fromList ["ty"; "vl"];
+    sigArguments := SFMap.fromList [ ("tm", [ "tm"; "ty"; "vl" ])
+                                  ; ("ty", [ "ty" ])
+                                  ; ("vl", [ "ty"; "tm" ]) ];
+    sigRenamings := SSet.fromList ["ty"; "tm"; "vl"];
+    |}.
+End Hsig_example.
+
+Module Hsig_fol.
+  #[ local ]
+   Open Scope string.
+  
+  Definition mySigSpec : Spec := SFMap.fromList [
+                                    ("form", [ {|
+                                                 con_parameters := [];
+                                                 con_name := "Fal";
+                                                 con_positions := []
+                                               |}; {|
+                                               con_parameters := [("p","nat")];
+                                               con_name := "Pred";
+                                               (* con_positions := [ {| pos_binders := []; pos_head := FunApp "cod" (Some (app1_ (ref_ "fin") (ref_ "p"))), [ Atom "term" ]); |}] *)
+                                               con_positions := [ {| pos_binders := []; pos_head := Atom "term" |}]
+                                             |}; {|
+                                               con_parameters := [];
+                                               con_name := "Impl";
+                                               con_positions := [ {| pos_binders := []; pos_head := Atom "form"; |};
+                                                            {| pos_binders := []; pos_head := Atom "form"; |} ];
+                                             |}; {|
+                                               con_parameters := [];
+                                               con_name := "Conj";
+                                               con_positions := [ {| pos_binders := []; pos_head := Atom "form" |};
+                                                            {| pos_binders := []; pos_head := Atom "form" |} ];
+                                             |}; {|
+                                               con_parameters := [];
+                                               con_name := "Disj";
+                                               con_positions := [ {| pos_binders := []; pos_head := Atom "form" |};
+                                                            {| pos_binders := []; pos_head := Atom "form" |} ];
+                                             |}; {|
+                                               con_parameters := [];
+                                               con_name := "All";
+                                               con_positions := [ {| pos_binders := [Single "term"];
+                                                                pos_head := Atom "form" |} ];
+                                             |}; {|
+                                               con_parameters := [];
+                                               con_name := "Ex";
+                                               con_positions := [ {| pos_binders := [Single "term"]; pos_head := Atom "form"; |} ]
+                                             |}
+                                             ]
+                                    ); ("term", [ {|
+                                                    con_parameters := [("f","nat")];
+                                                    con_name := "Func";
+                                                    (* con_positions := [ {|pos_binders := []; pos_head := FunApp ("cod", Some (app1_ (ref_ "fin") (ref_ "f")), [Atom "term"]); |} ] *)
+                                                    con_positions := [ {|pos_binders := []; pos_head := Atom "term" |} ]
+                                       |} ] )
+                                  ].
+
+  Definition mySig : Signature := {|
+    sigSpec := mySigSpec;
+    sigSubstOf := SFMap.fromList [ ("form",["term"]); ("term",["term"])];
+    sigComponents := [("term", []); ("form", [])];
+    sigIsOpen := SSet.fromList ["term"];
+    sigArguments := SFMap.fromList [ ("form",["term";"form"])
+                                   ; ("term",["term"])];
+    sigRenamings := SSet.fromList [];
+                                 |}.
+End Hsig_fol.

@@ -1,0 +1,1406 @@
+Require Import List String.
+Import ListNotations.
+Open Scope string.
+
+From MetaCoq.Template Require Import All.
+Import MonadNotation.
+From ASUB Require Import AssocList Language Quotes Utils DeBruijnMap Monad TemplateMonadUtils Names GallinaGen GenM.
+Load Termutil.
+
+Module helper.
+  Import GenM.Notations GenM.
+
+  (** Generate all the liftings (= Up = fatarrow^y_x) for all pairs of sorts in the current component.
+   ** So that we can later build the lifting functions "X_ty_ty", "X_ty_vl" etc. *)
+  Definition getUps (component: list tId) (remove: list (tId * tId)) : (list (tId * tId) * list (Binder * tId)) :=
+    let cart := cartesian_product component component in
+    let cart := list_diff_prod cart remove in
+    let singles := map (fun '(x, y) => (Single x, y)) cart in
+    (* let blists := map (fun '(x, y) => (BinderList ("p", x), y)) cart in *)
+    (* TODO scoped append blists *)
+    (cart, singles).
+  
+  Definition upList_ty :=
+    let m := substSorts <- substOf "ty";;
+             let '(_, upList) := getUps substSorts [] in
+             pure upList in
+    match run m (Hsig_example.mySig, initial_env) empty_state with
+    | inl _ => []
+    | inr (_, _, x) => x
+    end.
+
+  Definition upList_tm :=
+    let m := substSorts_ty <- substOf "ty";;
+             substSorts <- substOf "tm";;
+             let '(combinations, _) := getUps substSorts_ty [] in
+             let '(_, upList) := getUps substSorts combinations in
+             pure upList in
+    match run m (Hsig_example.mySig, initial_env) empty_state with
+    | inr (_, _, x) => x
+    | _ => []
+    end.
+End helper.
+Import helper.
+
+Module inductives.
+  Import GenM GenM.Notations.
+  
+  (** get the quoted type of an argument *)
+  Definition getArgType (p: Position) : t nterm :=
+    let '{| pos_binders := _;
+            pos_head := hd |} := p in
+    let sort := match hd with
+                | Atom sort => sort
+                (* TODO funapp *)
+                | FunApp _ _ _ => ""
+                end in
+    pure (nRef sort).
+
+  (* Generates the type of a variable constructor for a sort
+ db : base deBruijn index, should move into a reader monad *)
+  Definition genVarConstrType (sort: tId) : nterm :=
+    let s := genVarArg sort in
+    let typ := mknArr s [nRef sort] in
+    typ.
+
+  (* generates the type of a single argument of a constructor *)
+  Definition genArg (sort: string) (pos : Position) : t nterm :=
+    let '{| pos_binders := pos_binders; pos_head := pos_head |} := pos in
+    match pos_head with
+    | Atom argSort =>
+      (* TODO lift scopes *)
+      (* have to differentiate between sorts in the current component and sorts that are already in the environment *)
+      pure (nRef argSort)
+    (* TODO implement funapp case *)
+    | FunApp _ _ _ => pure nat_
+    end.
+
+  (** * Generates the type of a given constructor for a sort *)
+  Definition genConstructor (sort: tId) (c: Constructor) : t nterm :=
+    let '{| con_parameters := con_parameters;
+            con_name := _;
+            con_positions := con_positions |} := c in
+    (* need to fold over the positions to update the dbmap.
+     * Also remember that arg needs to be appended to the list because it's a left fold *)
+    up_n_x <- a_map (genArg sort) con_positions;;
+    (* todo take care of parameters *)
+    let targetType := nRef sort in
+    pure (mknArrRev up_n_x targetType).
+
+  (** * Generates a one_inductive_entry which holds the information for a single inductive type for a given sort based on the spec *)
+  Definition genOneInductive (dbmap: DB.t) (sort: tId) : t one_inductive_entry :=
+    ctors <- constructors sort;;
+    sortIsOpen <- isOpen sort;;
+    (* introScopeVar *)
+    let ctor_names := map con_name ctors in
+    ctor_ntypes <- a_map (genConstructor sort) ctors;;
+    (* maybe we also add a variable constructor *)
+    let '(ctor_names, ctor_ntypes) :=
+        if sortIsOpen
+        then (varConstrName sort :: ctor_names, genVarConstrType sort :: ctor_ntypes)
+        else (ctor_names, ctor_ntypes) in
+    (* register the type & ctor names to be put in the environment later *)
+    register_names (sort :: ctor_names);;
+    (* translate into TemplateCoq terms *)
+    ctor_types <- a_map (translate dbmap) ctor_ntypes;;
+    pure {|
+        mind_entry_typename := sort;
+        mind_entry_arity := tSort Universe.type0;
+        mind_entry_consnames := ctor_names;
+        mind_entry_lc := ctor_types 
+      |}.
+
+  (** * Generates a mutual_inductive_entry which combines multiple one_inductive_entry's into a mutual inductive type definition.
+   ** * For each sort in the component, a one_inductive_entry is generated *)
+  Definition genMutualInductive (component: list tId) : t mutual_inductive_entry :=
+    (* the entries already use deBruin numbers as if they were sequentially bound.
+     * i.e. the last entry has index 0. Therefore we can just add the component *)
+    (* only generate the definable sorts *)
+    def_sorts <- a_filter isDefinable component;;
+    let dbmap := DB.adds def_sorts DB.empty in
+    (* component also would contain predefined types like nat so we pass in def_sorts all the way down to genVarConstrType so that we also get nat out of the environment *)
+    entries <- a_map (genOneInductive dbmap) def_sorts;;
+    pure {|
+        mind_entry_record := None;
+        mind_entry_finite := Finite;
+        mind_entry_params := [];
+        mind_entry_inds := entries;
+        mind_entry_universes := Monomorphic_entry (LevelSet.empty, ConstraintSet.empty);
+        mind_entry_template := false;
+        mind_entry_variance := None;
+        mind_entry_private := None;
+      |}.
+
+  (* Eval cbv in (run (genMutualInductive ["ty"]) Hsig_example.mySig empty_state). *)
+End inductives.
+Import inductives.
+
+(** * TemplateMonad function to generate and unquote inductive types.
+ ** * It returns an updated environment that contains the new types and their constructors. *)
+Definition mkInductive (s: Signature) (component: list tId) (env: SFMap.t term) : TemplateMonad (SFMap.t term) :=
+  match GenM.run (genMutualInductive component) (s, env) empty_state with
+  | inr (_, state, mind) =>
+    tmMkInductive mind;;
+    tm_update_env state env
+  | inl e => tmFail e
+  end.
+
+MetaCoq Run (mkInductive Hsig_example.mySig ["ty"%string] GenM.initial_env  >>= tmEval TemplateMonad.Common.all >>= mkInductive Hsig_example.mySig ["tm"; "vl"] >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env0").
+
+
+Definition nlemma : Type := string * nterm * nterm.
+Definition lemma : Type := string * term * term.
+
+Module congruences.
+  Import GenM GenM.Notations.
+
+  Definition congrName (sort: tId) := sep "congr" sort.
+        
+  (** * generates the terms for the congruence lemmas for a constructor of an inductive type *)
+  Definition genCongruence (sort: tId) (ctor: Constructor) : t nlemma :=
+    let '{| con_parameters := con_parameters;
+            con_name := con_name;
+            con_positions := con_positions |} := ctor in
+    let ctor_tm := nRef con_name in
+    (* arguments to the lemma *)
+    let ss := getPattern "s" con_positions in
+    let ts := getPattern "t" con_positions in
+    arg_tys <- a_map getArgType con_positions;;
+    let eqs := map2 (fun s t => eq_ (nRef s) (nRef t)) ss ts in
+    let Hs := getPattern "H" con_positions in
+    (* building the binders of the lemma *)
+    let bss := combine ss arg_tys in
+    let bts := combine ts arg_tys in
+    let beqs := combine Hs eqs in
+    let proof := add_binders (bss ++ bts ++ beqs) in
+    (* body of the lemma *)
+    let (_, proof') := fold_left
+                         (fun '(i, tm) '(arg_typ, s, t, H) =>
+                            let feq_args := map nRef (firstn i ts ++ ["x"] ++ skipn (S i) ss) in
+                            let feq_lam := nLambda "x" nHole (nApp ctor_tm feq_args) in
+                            let feq := f_equal_ feq_lam (nRef s) (nRef t) (nRef H) in
+                            (S i, eq_trans_ tm feq))
+                         (combine (combine (combine arg_tys ss) ts) Hs)
+                         (0, eq_refl_) in
+    (* generate and register lemma name *)
+    let name := congrName con_name in
+    register_name name;;
+    (* generate the type of the lemma *)
+    let type := add_tbinders (bss ++ bts ++ beqs) in
+    let type' := eq_ (nApp ctor_tm (map nRef ss)) (nApp ctor_tm (map nRef ts)) in
+    pure (name, type type', proof proof').
+
+
+  (** * generates the terms for the congruence lemmas of the constructors of an inductive type *)
+  Definition genCongruences (sort: tId) : t (list lemma) :=
+    ctors <- constructors sort;;
+    a_map (fun ctor => translate_lemma (genCongruence sort ctor)) ctors.
+End congruences.
+Import congruences.
+
+
+(* Definition bind' := @bind TemplateMonad TemplateMonad_Monad. *)
+(* Arguments bind' {t u}. *)
+
+(* TODO seems like I still can't use implicit arguments.
+ * The problem is now that to use tmUnquoteTyped I would need a Coq type (not in the MetaCoq AST) but when I unquote it, the typechecker does not know it's actually a type.
+ * But in theory this should be possible to resolve by defining something like tmUnquoteType (no d) that gives me back a type (in this case the typed_term is not interesting because the first element will always be "Type") *)
+(* Definition mkLemma '(lname, lbody, ltype) : TemplateMonad unit := *)
+(*   bind' (tmUnquote ltype) *)
+(*        (fun type : typed_term => *)
+(*           bind' (tmEval lazy (my_projT2 type)) *)
+(*                (fun type0 : _ => *)
+(*                   bind' (tmUnquoteTyped type0 lbody) *)
+(*                        (fun body : _ => *)
+(*                           bind' (tmDefinitionRed lname (Some TemplateMonad.Common.all) body) *)
+(*                                (fun _ => tmReturn tt)))). *)
+
+(** * Helper function that does the actual unquoting to define alemma *)
+(* Definition mkLemma' '(lname, lbody) : TemplateMonad unit := *)
+(*   body <- tmUnquote lbody;; *)
+(*   body <- tmEval lazy (my_projT2 body);; *)
+(*   (* TODO In System F the all constructor shadowed the reductionStrategy. Is there a better way to avoid redefined names? I could put all unquoted definitions into their own module *) *)
+(*   tmDefinitionRed lname (Some TemplateMonad.Common.all) body;; *)
+(*   tmReturn tt. *)
+
+(* (** * TemplateMonad function to generate and unquote lemmas. *) *)
+(* Definition mkLemma (m: GenM.t (list (string * term))) (s: Signature) (env: SFMap.t term): TemplateMonad (SFMap.t term) := *)
+(*   match GenM.run m s empty_state with *)
+(*   | inl e => tmFail e *)
+(*   | inr (_, state, lemmas) => *)
+(*     tm_mapM mkLemma' lemmas;;  *)
+(*     tm_update_env state *)
+(*   end.  *)
+
+Definition mkLemmasTyped (m: GenM.t (list lemma)) (s: Signature) (env: SFMap.t term): TemplateMonad (SFMap.t term) :=
+  match GenM.run m (s, env) empty_state with
+  | inl e => tmFail e
+  | inr (_, state, lemmas) =>
+    tm_mapM tmTypedDefinition lemmas;; 
+    tm_update_env state env
+  end. 
+
+Definition mkCongruences (sort: tId) := mkLemmasTyped (genCongruences sort).
+
+MetaCoq Run (mkLemmasTyped (genCongruences "ty") Hsig_example.mySig env0 >>= tmEval TemplateMonad.Common.all >>=
+                          mkLemmasTyped (genCongruences "tm") Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>= mkLemmasTyped (genCongruences "vl") Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>=
+                          tmDefinition "env1").
+
+Module renamings.
+  Import GenM.Notations GenM.
+
+  (* TODO if I want to actually use isRec I would need to change the dbody of all the fexprs so I probably won't use it. *)
+  (* convert a list of fixpoint bodies into as many fixpoint definitions. Each fixpoint definitions references all the fixpoint bodies but has a different index into the list of bodies. *)
+  Definition buildFixpoint (fixBodies: list (def nterm)) (isRec: bool) : t (list lemma) :=
+    fixNames <- a_map get_fix_name fixBodies;;
+    register_names fixNames;;
+    let fixExprs :=  mapi (fun n _ => nFix fixBodies n) fixBodies in
+    fixExprs <- a_map (translate DB.empty) fixExprs;;
+    pure (map2 (fun name t => (name, hole, t)) fixNames fixExprs).
+
+  Definition upRenName (x: string) (b: Binder) :=
+    match b with
+    | Single sort' => sepd ["upRen"; x; sort']
+    end.
+  Definition upName (x: string) (b: Binder) :=
+    match b with
+    | Single sort' => sepd ["up"; x; sort']
+    end.
+
+  Definition renName (x: string) := sep "ren" x.
+  (* TODO make genRenS and genSubstS return a list of binders *)
+  Definition genRenS (name: string) := (nRef name, (name, nArr nat_ nat_)).
+
+  Definition genUpRen (bs: Binder * tId) : t (string * nterm * nterm) :=
+    let '(binder, sort) := bs in
+    let '(xi, bxi) := genRenS "xi" in
+    (* let '(_, bpms) := bparameters binder in *)
+    let preProof := definitionBody sort binder (up_ren_ xi) xi in
+    let proof := add_binders [ bxi ] preProof in
+    let preType := nArr nat_ nat_ in
+    let type := add_tbinders [bxi] preType in
+    let name := upRenName sort binder in
+    register_name name;;
+    pure (name, type, proof).
+
+  Definition genUpRens (bss: list (Binder * tId)) : t (list (string * term * term)) :=
+    a_map (fun bs => translate_lemma (genUpRen bs)) bss.
+
+  Inductive SubstTy : Type :=
+  | SubstScope : list string -> list nterm -> SubstTy
+  | SubstRen : list nterm -> SubstTy
+  | SubstSubst : list nterm -> SubstTy
+  | SubstEq : list nterm -> (tId -> Binder -> nterm -> t nterm) -> SubstTy.
+  Definition sty_terms (st: SubstTy) :=
+    match st with
+    | SubstScope _ nts => nts
+    | SubstRen nts => nts
+    | SubstSubst nts => nts
+    | SubstEq nts _ => nts
+    end.
+
+  Definition aname_ (name: string) : aname := {| binder_name := nNamed name; binder_relevance := Relevant |}.
+
+  (* TODO implement *)
+  (* Definition mk_underscore_pattern (scope: tId) := []. *)
+
+  Definition hasArgs (sort: tId) : t bool :=
+    substSorts <- substOf sort;;
+    match substSorts with
+    | [] => pure false
+    | _ => pure true
+    end.
+
+  Definition branch_ (underscoreNum: nat) (binders: list string) (body: nterm) : (nat * nterm) :=
+    let paramNum := underscoreNum + List.length binders in
+    let binders := List.map (fun n => (n, nHole)) binders in
+    let body := add_binders binders body in
+    (paramNum, body).
+  
+  Definition mk_var_pattern (sort: tId) (var_case_body: nterm -> t nterm) : t (list (nat * nterm)) :=
+    sortIsOpen <- isOpen sort;;
+    if sortIsOpen
+    then
+      let s0 := "s0" in
+      var_body <- var_case_body (nRef s0);;
+      pure [ branch_ 0 [s0] var_body ]
+    else pure [].
+
+  Definition up (sort: tId) (f: tId -> Binder -> nterm -> nterm) (n: list nterm) (b: Binder) : t (list nterm) :=
+    substSorts <- substOf sort;;
+    pure (map2 (fun p n_i => f p b n_i) substSorts n).
+
+  Definition ups (sort: tId) (f: string -> Binder -> nterm -> nterm) := m_fold_left (up sort f).
+
+  Definition succ_ (n: nterm) (z: string) (b: Binder) :=
+    match b with
+    | Single x => if eqb z x
+                 then nApp (nRef "S") [n] else n
+    end.
+  
+  Definition upScope (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (n: nterm) => succ_ n z b) terms binders.
+
+  Definition upRen (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (xi: nterm) => nApp (nRef (upRenName z b)) [ xi ]) terms binders.
+
+  Definition upSubstS (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (sigma: nterm) => nApp (nRef (upName z b)) [ sigma ]) terms binders.
+
+  Definition up' (x: string) (f: tId -> Binder -> nterm -> t nterm) (n: list nterm) (b: Binder) : t (list nterm) :=
+    substSorts <- substOf x;;
+    a_map (fun '(p, n_i) => f p b n_i) (combine substSorts n).
+
+  Definition upEq (sort: tId) (binders: list Binder) (terms: list nterm) (f: tId -> Binder -> nterm -> t nterm) :=
+    m_fold_left (up' sort f) terms binders.
+  
+  Definition upSubst (sort: tId) (binders: list Binder) (st: SubstTy) :=
+    match st with
+    | SubstScope ns nts => fmap (fun nts => SubstScope ns nts) (upScope sort binders nts)
+    | SubstRen nts => fmap (fun nts => SubstRen nts) (upRen sort binders nts)
+    | SubstSubst nts => fmap (fun nts => SubstSubst nts) (upSubstS sort binders nts)
+    | SubstEq nts f => fmap (fun nts => SubstEq nts f) (upEq sort binders nts f)
+    end.
+  
+  Definition cast (sort sort': tId) (nts: list nterm) :=
+    substSorts <- substOf sort;;
+    substSorts' <- substOf sort';;
+    pure (List.fold_right (fun '(x, v) ws => if list_mem x substSorts' then v :: ws else ws)
+                          [] (combine substSorts nts)).
+
+  Definition castSubst (sort sort': tId) (st: SubstTy) :=
+    match st with
+    | SubstScope ns nts => fmap (fun nts => SubstScope ns nts) (cast sort sort' nts)
+    | SubstRen nts => fmap (fun nts => SubstRen nts) (cast sort sort' nts)
+    | SubstSubst nts => fmap (fun nts => SubstSubst nts) (cast sort sort' nts)
+    | SubstEq nts f => fmap (fun nts => SubstEq nts f) (cast sort sort' nts)
+    end.
+
+  Definition castUpSubst (sort: tId) (binders: list Binder) (sort': tId) (st: SubstTy) : t SubstTy :=
+    st' <- castSubst sort sort' st;;
+    upSubst sort' binders st'.
+
+  Definition abs_ref x t := nLambda x nHole t.
+
+  Fixpoint arg_map (sort: tId) (args: list SubstTy) (name: string -> string) (no_args: nterm -> nterm) (funsem: string -> list nterm -> nterm) (bs: list Binder) (arg: ArgumentHead) :=
+    match arg with
+    | Atom y =>
+      b <- hasArgs y;;
+      args <- a_map (castUpSubst sort bs y) args;;
+      pure (if b
+            then nApp (nRef (name y)) (flat_map sty_terms args)
+            else abs_ref "x" (no_args (nRef "x")))
+    | FunApp f p xs =>
+      res <- a_map (arg_map sort args name no_args funsem bs) xs;;
+      pure (funsem f res)
+    end.
+
+  
+  Definition mk_constr_pattern (s: string) (sort: tId) (args: list SubstTy) (name: string -> string) (no_args: nterm -> nterm) (sem: list string -> string -> list nterm -> nterm) (funsem: string -> list nterm -> nterm) (ctor: Constructor) : t (nat * nterm) :=
+    let '{| con_parameters := cparameters; con_name := cname; con_positions := cpositions |} := ctor in
+    let ss := getPattern "s" cpositions in
+    positions <- a_map (fun '(s, {| pos_binders := binders; pos_head := head |}) =>
+                         fmap2 nApp (arg_map sort args name no_args funsem binders head) (pure [ nRef s ]))
+                      (combine ss cpositions);;
+    let paramNames := List.map fst cparameters in
+    pure (branch_ 0 (List.app paramNames ss) (sem paramNames cname positions)).
+  
+  Definition traversal (sort: tId) (name: string -> string) (no_args: nterm -> nterm) (ret: nterm -> nterm) (bargs: list (string * nterm)) (args: list SubstTy) (var_case_body: nterm -> t nterm) (sem: list string -> string -> list nterm -> nterm) (funsem: string -> list nterm -> nterm) : t (def nterm) :=
+    ctors <- constructors sort;;
+    let s := "s" in
+    let lambdas := List.app bargs [(s, nRef sort)] in
+    (** * the structural argument
+     * it's always the last one so it's the length of all outermost binders
+     * TODO can we move all other binders outside and have the mutual fixpoint bodies only take this argument?
+     * FIX: only set to length of bargs since we start counting at 0
+     *)
+    let argNum := List.length bargs in
+    (** * the type of the fixpoint *)
+    let innerType := ret (nRef s) in
+    let type := add_tbinders lambdas innerType in
+    (** * the body of the fixpoint *)
+    var_pattern <- mk_var_pattern sort var_case_body;;
+    constr_patterns <- a_map (mk_constr_pattern s sort args name no_args sem funsem) ctors;;
+    (* TODO calculate number of parameters *)
+    (* DONE fix elemination predicate. I tried putting a hole as the return type but Coq is not smart enough to infer it. But we can use the return type function we already have available. *)
+    let innerBody := nCase sort 0 (nLambda s (nRef sort) innerType) (nRef s) (List.app var_pattern constr_patterns) in
+    let body := add_binders lambdas innerBody in
+    pure {| dname := aname_ (name sort); dtype := type; dbody := body; rarg := argNum |}.
+
+    
+  Definition genRen (name: string) (sort: tId) : t (SubstTy * list (string * nterm)) :=
+    substSorts <- substOf sort;;
+    let names := List.map (sep name) substSorts in
+    let binders := List.map (fun name => (name, nArr nat_ nat_)) names in
+    pure (SubstRen (List.map nRef names), binders).
+
+  Definition toVar (sort: tId) (ts: SubstTy) : t nterm :=
+    substSorts <- substOf sort;;
+    let zs := List.filter (fun '(substSort, _) => eqb sort substSort) (combine substSorts (sty_terms ts)) in
+    match zs with
+    | [] => error "toVar was called with incompatible sort and substitution vector."
+    | z::_ => pure (snd z)
+    end.
+
+  Definition app_constr (cname: string) (rest: list nterm) : nterm :=
+    match rest with
+    | [] => nRef cname
+    | _ => nApp (nRef cname) rest
+    end.
+
+  Definition map_ f ts := nApp (nRef (sep f "map")) ts.
+
+  Definition genRenaming (sort: tId) : t (def nterm) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    substSorts <- substOf sort;;
+    let ret := fun _ => nRef sort in
+    traversal sort renName Datatypes.id ret bxis [ xis ]
+              (fun s => toVarT <- toVar sort xis;;
+                     pure (nApp (nRef (varConstrName sort)) [ nApp toVarT [ s ] ]))
+              (fun paramNames cname positions => app_constr cname (List.app (List.map nRef paramNames) positions))
+              map_.
+  
+  Definition genRenamings (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genRenaming componentL;;
+    buildFixpoint fexprs isRec.
+End renamings.
+Import renamings.
+
+MetaCoq Run (mkLemmasTyped (genUpRens upList_ty) Hsig_example.mySig env1 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env2").
+
+MetaCoq Run (mkLemmasTyped (genRenamings ("ty", [])) Hsig_example.mySig env2 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env3").
+
+MetaCoq Run (mkLemmasTyped (genUpRens upList_tm) Hsig_example.mySig env3 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env4").
+
+MetaCoq Run (mkLemmasTyped (genRenamings ("tm", ["vl"])) Hsig_example.mySig env4 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env5").
+
+
+Module substitutions.
+  Import GenM.Notations GenM.
+  (* From ASUB Require Import core. *)
+
+  
+  Definition substName (x: string) := sep "subst" x.
+
+  (* TODO first component should be nterm directly? *)
+  Definition genSubstS (name: string) (sort: tId) : nterm * (string * nterm) :=
+    (nRef name, (name, nArr nat_ (nRef sort))).
+  Definition genSubst (name: string) (sort: tId) :=
+    substSorts <- substOf sort;;
+    let names := List.map (sep name) substSorts in
+    let binders := map2 (fun name substSort => (name, nArr nat_ (nRef substSort))) names substSorts in
+    pure (SubstSubst (List.map nRef names), binders).
+
+  Definition var_constr (sort: tId) := nRef (varConstrName sort).
+
+  Definition shift (hasRen: bool) (substSorts: list tId) (sort: tId) :=
+    if hasRen
+    then shift_
+    else funcomp_ shift_ (nApp (var_constr sort) (List.map (fun _ => nHole) substSorts)).
+
+  Definition patternSId (sort: tId) (binder: Binder) :=
+    substSorts <- substOf sort;;
+    hasRen <- hasRenaming sort;;
+    up sort (fun substSort b _ => match b with
+                               | Single bsort =>
+                                 if eqb substSort bsort then shift hasRen substSorts substSort else id_
+                               end)
+       (List.map nRef substSorts) binder.
+            
+    
+  Definition mk_scons (sort: tId) (binder: Binder) (sigma: nterm) :=
+    match binder with
+    | Single sort' => if eqb sort sort'
+                     then
+                       let zero := nApp (nRef (varConstrName sort)) [var_zero_] in
+                       scons_ zero sigma
+                     else sigma
+    end.
+
+  Definition upSubstT (binder: Binder) (sort: tId) (sigma: nterm) : t nterm :=
+    hasRen <- hasRenaming sort;;
+    pat <- patternSId sort binder;;
+    let f := if hasRen
+             then nRef (renName sort)
+             else nRef (substName sort) in
+    let sigma' := sigma >>> (nApp f pat) in
+    pure (mk_scons sort binder sigma').                   
+
+  Definition genUp (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    (* let '(_, bpms) := bparameters binder in *)
+    innerBody <- upSubstT binder sort sigma;;
+    let body := add_binders [ bsigma ] innerBody in
+    let innerType := nArr nat_ (nRef sort) in
+    let type := add_tbinders [ bsigma ] innerType in
+    let name := upName sort binder in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genUps (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUp bs)) bss.
+
+  (** Generate the substitution function
+   ** e.g. subst_ty *)
+  Definition genSubstitution (sort: tId) : t (def nterm) :=
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    subsorts <- substOf sort;;
+    traversal sort substName Datatypes.id (fun _ => nRef sort) bsigmas [ sigmas ]
+              (fun s =>
+                 toVarT <- toVar sort sigmas;;
+                 pure (nApp toVarT [ s ]))
+              (fun paramNames cname positions => app_constr cname (List.app (List.map nRef paramNames) positions))
+              map_.
+    
+  Definition genSubstitutions (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genSubstitution componentL;;
+    buildFixpoint fexprs isRec.
+    
+End substitutions.
+Import substitutions.
+
+MetaCoq Run (mkLemmasTyped (genUps upList_ty) Hsig_example.mySig env5 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env6").
+
+MetaCoq Run (mkLemmasTyped (genSubstitutions ("ty", [])) Hsig_example.mySig env6 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env7").
+
+MetaCoq Run (mkLemmasTyped (genUps upList_tm) Hsig_example.mySig env7 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env8").
+
+MetaCoq Run (mkLemmasTyped (genSubstitutions ("tm", ["vl"])) Hsig_example.mySig env8 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env9").
+
+Module idsubsts.
+  Import GenM.Notations GenM.
+
+  (** Create an extensional equivalence between unary functions s & t
+   ** forall x, s x = t x *)
+  Definition equiv_ (n: nterm) (s t: nterm) : nterm :=
+    let equality := eq_ (nApp s [ n ]) (nApp t [ n ]) in
+    equality.
+
+  Definition introDBVar (name: string) : nterm * (string * nterm) :=
+    (nRef name, (name, nat_)).
+  Definition genEqS (name: string) (bn: string * nterm) (sigma tau: nterm) : nterm * (string * nterm) :=
+    let '(n, nt) := bn in
+    (nRef name, (name, nProd n nt (equiv_ (nRef n) sigma tau))).
+
+  MetaCoq Run (tmQuote (match 0 with S n => n | O => O  end ) >>= tmPrint).
+
+  (* TODO f does not really need to be a function? *)
+  Definition matchFin_ (bn: string * nterm) (equality: nterm) (s: nterm) (f: nterm -> nterm) (b: nterm) :=
+    let '(n, nt) := bn in
+    let branches := [ (0, b); (1, nLambda "n'" nat_ (f (nRef "n'"))) ] in
+    let elimPred := nLambda n nt equality in
+    nCase "nat" 0 elimPred s branches.
+
+
+  Definition upIdName (sort: tId) (b: Binder) :=
+    match b with
+    | Single x => sepd ["upId"; x; sort]
+    end.
+  
+  Definition genUpId (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    let '(n, bn) := introDBVar "n" in
+    let '(eq, beq) := genEqS "Eq" bn sigma (nRef (varConstrName sort)) in
+    (** * type *)
+    let innerType := equiv_ n
+                       (nApp (nRef (upName sort binder)) [ sigma ])
+                       (nRef (varConstrName sort)) in
+    let type := add_tbinders [ bsigma; beq; bn ] innerType in
+    (** * body *)
+    shift <- patternSId sort binder;;
+    hasRen <- hasRenaming sort;;
+    let t := fun (n: nterm) =>
+               ap_ (nApp (nRef (if hasRen then renName sort else substName sort)) shift)
+                   (nApp eq [ n ]) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bn innerType n t eq_refl_) (t n) in
+    let body := add_binders [ bsigma; beq; bn ] innerBody in
+    (** * name *)
+    let name := upIdName sort binder in
+    register_name name;;
+    pure (name, type, body).
+  
+  Definition genUpIds (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpId bs)) bss.
+
+  Definition mk_var_apps (sort: tId) : t (list nterm) :=
+    substSorts <- substOf sort;;
+    a_map (fun substSort => pure (nRef (varConstrName substSort))) substSorts.
+
+  Definition genEq (name: string) (sort: tId) (sigmas taus: list nterm) (f: string -> Binder -> nterm -> t nterm) :=
+    substSorts <- substOf sort;;
+    let names := List.map (sep name) substSorts in
+    let binders := map2 (fun n '(s, t) => (n, nProd "x" nHole (equiv_ (nRef "x") s t))) names (combine sigmas taus) in
+    pure (SubstEq (List.map nRef names) f, binders).
+
+  Definition idSubstName (sort: tId) := sep "idSubst" sort.
+  Definition mapId_ f ts := nApp (nRef (sep f "id")) ts.
+  Definition no_args_default := fun s => nApp eq_refl_ [ s ].
+
+  Fixpoint list_fill {A: Type} (a: A) (n: nat) : list A :=
+    match n with
+    | O => []
+    | S n => a :: list_fill a n
+    end.
+
+  (* TODO bettenr way to find out length of implicit arguments to congr.
+   * It would probably be best to save that information also in the environment.
+   * Like a list of all arguments where I mark which ones should be implicit *)
+  Definition sem_default := (fun (paramNames: list string) cname positions =>
+                               nApp (nRef (congrName cname)) (List.app (list_fill nHole (2 * List.length positions)) positions)).
+    
+  Definition genIdLemma (sort: tId) : t (def nterm) :=
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    substSorts <- substOf sort;;
+    eqs' <- mk_var_apps sort;;
+    '(eqs, beqs) <- genEq "Eq" sort (sty_terms sigmas) eqs'
+                         (fun x y s => pure (nApp (nRef (upIdName x y)) [nHole; s]));;
+    let ret := fun s =>
+                 eq_ (nApp (nRef (substName sort)) (List.app (sty_terms sigmas) [ s ])) s in
+    traversal sort idSubstName no_args_default ret (List.app bsigmas beqs) [ sigmas; eqs ]
+              (fun s =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [ s ]))
+              sem_default
+              mapId_.
+  
+  Definition genIdLemmas (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genIdLemma componentL;;
+    buildFixpoint fexprs isRec.
+End idsubsts.
+Import idsubsts.
+
+MetaCoq Run (mkLemmasTyped (genUpIds upList_ty) Hsig_example.mySig env9 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env10").
+
+MetaCoq Run (mkLemmasTyped (genIdLemmas ("ty", [])) Hsig_example.mySig env10 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env11").
+
+MetaCoq Run (mkLemmasTyped (genUpIds upList_tm) Hsig_example.mySig env11 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env12").
+
+MetaCoq Run (mkLemmasTyped (genIdLemmas ("tm", ["vl"])) Hsig_example.mySig env12 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env13").
+
+Module extensionality.
+  Import GenM.Notations GenM.
+
+  Definition upNameGen (name: string) (sort: tId) (binder: Binder) :=
+    match binder with
+    | Single sort' => sepd [name; sort'; sort]
+    end.
+
+  Definition upExtRenName := upNameGen "upExtRen".
+  Definition upExtName := upNameGen "upExt".
+  
+  Definition genUpExtRen (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(xi, bxi) := genRenS "xi" in
+    let '(zeta, bzeta) := genRenS "zeta" in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx xi zeta in
+    (* type *)
+    let innerType := equiv_ x (nApp (nRef (upRenName sort binder)) [ xi ]) (nApp (nRef (upRenName sort binder)) [ zeta ]) in
+    let type := add_tbinders [ bxi; bzeta; beq; bx ] innerType in
+    (* body *)
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x (fun n => ap_ shift_ (nApp eq [n])) eq_refl_)
+                                    (nApp eq [x]) in
+    let body := add_binders [ bxi; bzeta; beq; bx ] innerBody in
+    (* name *)
+    let name := upExtRenName sort binder in
+    register_name name;;
+    pure (name, type, body).
+  
+  Definition genUpExtRens (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpExtRen bs)) bss.
+
+  Definition mapExt_ f ts := nApp (nRef (sep f "ext")) ts.
+  Definition extRenName sort := sep "extRen" sort.
+  Definition extName sort := sep "ext" sort.
+  
+  Definition genExtRen (sort: tId) : t (def nterm) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    '(zetas, bzetas) <- genRen "zeta" sort;;
+    '(eqs, beqs) <- genEq "Eq" sort (sty_terms xis) (sty_terms zetas)
+                         (fun x y s => pure (nApp (nRef (upExtRenName x y)) [nHole; nHole; s]));;
+    (* type *)
+    let ret := fun s => eq_ (nApp (nRef (renName sort)) (List.app (sty_terms xis) [s]))
+                         (nApp (nRef (renName sort)) (List.app (sty_terms zetas) [s])) in
+    traversal sort extRenName no_args_default ret (List.concat [bxis; bzetas; beqs]) [xis; zetas; eqs]
+              (fun z =>
+                 toVarT <- toVar sort eqs;;
+                 pure (ap_ (nRef (varConstrName sort)) (nApp toVarT [z])))
+              sem_default
+              mapExt_.
+
+  Definition genExtRens (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genExtRen componentL;;
+    buildFixpoint fexprs isRec.
+
+  Definition genUpExt (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    let '(tau, btau) := genSubstS "tau" sort in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx sigma tau in
+    (* type *)
+    let innerType := equiv_ x (nApp (nRef (upName sort binder)) [ sigma ]) (nApp (nRef (upName sort binder)) [ tau ]) in
+    let type := add_tbinders [ bsigma; btau; beq; bx ] innerType in
+    (* body *)
+    shift <- patternSId sort binder;;
+    hasRen <- hasRenaming sort;;
+    let innerBodyHelper := fun n => ap_ (nApp (nRef (if hasRen then renName sort else substName sort)) shift)
+                                     (nApp eq [n]) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x innerBodyHelper eq_refl_)
+                                    (innerBodyHelper x) in
+    let body := add_binders [ bsigma; btau; beq; bx ] innerBody in
+    (* name *)
+    let name := upExtName sort binder in
+    register_name name;;
+    pure (name, type, body).
+    
+  Definition genUpExts (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpExt bs)) bss.
+
+  Definition genExt (sort: tId) : t (def nterm) :=
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    '(taus, btaus) <- genSubst "tau" sort;;
+    '(eqs, beqs) <- genEq "Eq" sort (sty_terms sigmas) (sty_terms taus)
+                         (fun x y s => pure (nApp (nRef (upExtName x y)) [nHole; nHole; s]));;
+    let ret := fun s => eq_ (nApp (nRef (substName sort)) (List.app (sty_terms sigmas) [s]))
+                         (nApp (nRef (substName sort)) (List.app (sty_terms taus) [s])) in
+    traversal sort extName no_args_default ret (List.concat [bsigmas; btaus; beqs]) [sigmas; taus; eqs]
+              (fun z =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [z]))
+              sem_default
+              mapExt_.
+    
+  Definition genExts (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genExt componentL;;
+    buildFixpoint fexprs isRec.
+
+End extensionality.
+Import extensionality.
+
+MetaCoq Run (mkLemmasTyped (genUpExtRens upList_ty) Hsig_example.mySig env13 >>= tmEval TemplateMonad.Common.all >>=
+             mkLemmasTyped (genUpExts upList_ty) Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>=
+             tmDefinition "env14").
+
+MetaCoq Run (mkLemmasTyped (genUpExtRens upList_tm) Hsig_example.mySig env14 >>= tmEval TemplateMonad.Common.all >>=
+             mkLemmasTyped (genUpExts upList_tm) Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>=
+             tmDefinition "env15").
+
+MetaCoq Run (mkLemmasTyped (genExtRens ("ty", [])) Hsig_example.mySig env15 >>= tmEval TemplateMonad.Common.all >>=
+             mkLemmasTyped (genExts ("ty", [])) Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>=
+                           tmDefinition "env16").
+
+MetaCoq Run (mkLemmasTyped (genExtRens ("tm", ["vl"])) Hsig_example.mySig env16 >>= tmEval TemplateMonad.Common.all >>=
+             mkLemmasTyped (genExts ("tm", ["vl"])) Hsig_example.mySig >>= tmEval TemplateMonad.Common.all >>=
+                           tmDefinition "env17").
+
+Module renRen.
+  Import GenM.Notations GenM.
+  
+  Definition upRenRenName := upNameGen "up_ren_ren".
+
+  Definition genUpRenRen (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(xi, bxi) := genRenS "xi" in
+    let '(zeta, bzeta) := genRenS "zeta" in
+    let '(rho, brho) := genRenS "rho" in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx (xi >>> zeta) rho in
+    (* type *)
+    let innerType := equiv_ x ((nApp (nRef (upRenName sort binder)) [xi])
+                                 >>> (nApp (nRef (upRenName sort binder)) [zeta]))
+                            (nApp (nRef (upRenName sort binder)) [rho]) in
+    let type := add_tbinders [bxi; bzeta; brho; beq; bx] innerType in
+    (* body *)
+    (* a.d. here I have to take care to also pass x to up_ren_ren and to eq in the second case of definitionBody *)
+    let innerBody := definitionBody sort binder (nApp up_ren_ren_ [xi; zeta; rho; eq; x]) (nApp eq [x]) in
+    let body := add_binders [bxi; bzeta; brho; beq; bx] innerBody in 
+    (* name *)
+    let name := upRenRenName sort binder in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genUpRenRens (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpRenRen bs)) bss.
+
+  Definition compRenRenName x := sep "compRenRen" x.
+  Definition mapComp_ f ts := nApp (nRef (sep f "comp")) ts.
+
+  Definition genCompRenRen (sort: tId) : t (def nterm) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    '(zetas, bzetas) <- genRen "zeta" sort;;
+    '(rhos, brhos) <- genRen "rho" sort;;
+    '(eqs, beqs) <- genEq "Eq" sort
+                         (map2 funcomp_ (sty_terms zetas) (sty_terms xis))
+                         (sty_terms rhos)
+                         (fun x y s => match y with
+                                    | Single z => if eqb z x
+                                                        (* TODO do I need an x to pass to up_ren_ren here *)
+                                                 then pure (nApp up_ren_ren_ [nHole; nHole; nHole; s])
+                                                 else pure s
+                                    end);;
+    let ret := fun s => eq_ (nApp (nRef (renName sort)) (List.app (sty_terms zetas)
+                                                        [ nApp (nRef (renName sort)) (List.app (sty_terms xis) [s]) ]))
+                         (nApp (nRef (renName sort)) (List.app (sty_terms rhos) [s])) in
+    traversal sort compRenRenName no_args_default ret (List.concat [bxis; bzetas; brhos; beqs]) [xis; zetas; rhos; eqs]
+              (fun n =>
+                 toVarT <- toVar sort eqs;;
+                 pure (ap_ (nRef (varConstrName sort)) (nApp toVarT [n])))
+              sem_default
+              mapComp_.
+              
+  Definition genFixpoint (genF : tId -> t (def nterm)) (component: NEList.t tId) : t (list lemma) :=
+    let componentL := NEList.to_list component in
+    isRec <- isRecursive component;;
+    fexprs <- a_map genF componentL;;
+    buildFixpoint fexprs isRec.
+
+  Definition genCompRenRens := genFixpoint genCompRenRen.
+End renRen.
+Import renRen.
+
+MetaCoq Run (mkLemmasTyped (genUpRenRens upList_ty) Hsig_example.mySig env17 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env18").
+
+MetaCoq Run (mkLemmasTyped (genUpRenRens upList_tm) Hsig_example.mySig env18 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env19").
+
+MetaCoq Run (mkLemmasTyped (genCompRenRens ("ty", [])) Hsig_example.mySig env19 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env20").
+
+MetaCoq Run (mkLemmasTyped (genCompRenRens ("tm", ["vl"])) Hsig_example.mySig env20 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env21").
+
+Module renSubst.
+  Import GenM.Notations GenM.
+  
+  Definition upRenSubstName := upNameGen "up_ren_subst".
+  Definition compRenSubstName x := sep "compRenSubst" x.
+
+  Definition app_ref n ts := nApp (nRef n) ts.
+
+  Definition genUpRenSubst (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(xi, bxi) := genRenS "xi" in
+    let '(tau, btau) := genSubstS "tau" sort in
+    let '(theta, btheta) := genSubstS "theta" sort in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx (xi >>> tau) theta in
+    (* type *)
+    let innerType := equiv_ x ((app_ref (upRenName sort binder) [xi])
+                                 >>> (app_ref (upName sort binder) [tau]))
+                            (app_ref (upName sort binder) [theta]) in
+    let type := add_tbinders [bxi; btau; btheta; beq; bx] innerType in
+    (* body *)
+    shift <- patternSId sort binder;;
+    let innerBodyHelper := fun n => ap_ (app_ref (renName sort) shift) (nApp eq [n]) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x innerBodyHelper eq_refl_)
+                                    (innerBodyHelper x) in
+    let body := add_binders [bxi; btau; btheta; beq; bx] innerBody in
+    (* name *)
+    let name := upRenSubstName sort binder in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genUpRenSubsts (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpRenSubst bs)) bss.
+  
+  Definition genCompRenSubst (sort: tId) : t (def nterm) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    '(taus, btaus) <- genSubst "tau" sort;;
+    '(thetas, bthetas) <- genSubst "theta" sort;;
+    '(eqs, beqs) <- genEq "Eq" sort
+                         (map2 funcomp_ (sty_terms taus) (sty_terms xis))
+                         (sty_terms thetas)
+                         (fun x y s => pure (app_ref (upRenSubstName x y) [nHole; nHole; nHole; s]));;
+    (* type *)
+    let ret := fun s => eq_ (app_ref (substName sort) (List.app (sty_terms taus)
+                                                             [app_ref (renName sort) (List.app (sty_terms xis) [s])]))
+                         (app_ref (substName sort) (List.app (sty_terms thetas) [s])) in
+    traversal sort compRenSubstName no_args_default ret (List.concat [bxis; btaus; bthetas; beqs]) [xis; taus; thetas; eqs]
+              (fun n =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [n]))
+              sem_default
+              mapComp_.
+    
+  Definition genCompRenSubsts := genFixpoint genCompRenSubst.
+End renSubst.
+Import renSubst.
+
+MetaCoq Run (mkLemmasTyped (genUpRenSubsts upList_ty) Hsig_example.mySig env21 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env22").
+
+(* From ASUB Require Import core. *)
+
+(* Lemma up_ren_subst'_ty_ty (xi : nat -> nat) (tau : nat -> ty) *)
+(*   (theta : nat -> ty) (Eq : forall x, funcomp tau xi x = theta x) : *)
+(*   forall x, funcomp (up_ty_ty tau) (upRen_ty_ty xi) x = up_ty_ty theta x. *)
+(* Proof. *)
+(* exact (up_ren_subst_ty_ty xi tau theta Eq). *)
+(* Qed. *)
+
+(* MetaCoq Run (tm_update_env {| st_names := ["up_ren_subst'_ty_ty"] |} env22 >>= tmDefinition "env22'"). *)
+
+(* DONE the type of up_ren_subst_ty_ty is evaluated too much so this fails. If I define a lemma with the correct type I can use the same proof (see above) and then it works.
+ * It worked when I used the hnf reduction strategy in my unquoteTyped helper function *)
+MetaCoq Run (mkLemmasTyped (genUpRenSubsts upList_tm) Hsig_example.mySig env22 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env23").
+
+MetaCoq Run (mkLemmasTyped (genCompRenSubsts ("ty", [])) Hsig_example.mySig env23 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env24").
+
+MetaCoq Run (mkLemmasTyped (genCompRenSubsts ("tm", ["vl"])) Hsig_example.mySig env24 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env25").
+
+Module substRen.
+  Import GenM.Notations GenM.
+  
+  Definition upSubstRenName := upNameGen "up_subst_ren".
+  Definition compSubstRenName x := sep "compSubstRen" x.
+
+  Definition const {A B} (a: A) (b: B) : A := a.
+
+  Definition genUpSubstRen (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    '(zetas, bzetas) <- genRen "zeta" sort;;
+    let '(theta, btheta) := genSubstS "theta" sort in
+    let '(x, bx) := introDBVar "x" in
+    (* sigma >> <zeta> =1 theta *)
+    let '(eq, beq) := genEqS "Eq" bx (sigma >>> (app_ref (renName sort) (sty_terms zetas))) theta in
+    zetas' <- upSubst sort [binder] zetas;;
+    pat <- patternSId sort binder;;
+    (* type *)
+    let innerType := equiv_ x ((app_ref (upName sort binder) [sigma])
+                                 >>> (app_ref (renName sort) (sty_terms zetas')))
+                            (app_ref (upName sort binder) [theta]) in
+    let type := add_tbinders (List.concat [[bsigma]; bzetas; [btheta]; [beq]; [bx]]) innerType in
+    (* body *)
+    let compRenRenArgs := fun n => List.concat [map2 funcomp_ pat (sty_terms zetas);
+                                            List.map (const (abs_ref "x" eq_refl_)) pat;
+                                            [ nApp sigma [n] ]] in
+    let innerBodyHelper n :=
+        eq_trans_ (app_ref (compRenRenName sort)
+                           (List.concat [pat; sty_terms zetas'; compRenRenArgs n]))
+                  (eq_trans_ (eq_sym_ (app_ref (compRenRenName sort)
+                                               (List.concat [sty_terms zetas; pat; compRenRenArgs n])))
+                             (ap_ (app_ref (renName sort) pat)
+                                  (nApp eq [n]))) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x innerBodyHelper eq_refl_)
+                                    (innerBodyHelper x) in
+    let body := add_binders (List.concat [[bsigma]; bzetas; [btheta]; [beq]; [bx]]) innerBody in
+    (* name *)
+    let name := upSubstRenName sort binder in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genUpSubstRens (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpSubstRen bs)) bss.
+
+  Definition comp_ren_or_subst (sort: tId) (stys1 stys2: SubstTy) :=
+    substSorts <- substOf sort;;
+    renOrSubstName <- match stys1 with
+                   | SubstRen _ => pure renName
+                   | SubstSubst _ => pure substName
+                   | _ => error "comp_ren_or_subst called with wrong subst_ty"
+                   end;;
+    a_map2 (fun substSort sty2 =>
+              stys1' <- castSubst sort substSort stys1;;
+              pure (sty2 >>> app_ref (renOrSubstName substSort) (sty_terms stys1')))
+           substSorts (sty_terms stys2).                         
+  
+  Definition genCompSubstRen (sort: tId) : t (def nterm) :=
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    '(zetas, bzetas) <- genRen "zeta" sort;;
+    '(thetas, bthetas) <- genSubst "theta" sort;;
+    sigmazeta <- comp_ren_or_subst sort zetas sigmas;;
+    '(eqs, beqs) <- genEq "Eq" sort sigmazeta (sty_terms thetas)
+                         (fun x y s =>
+                            zetas' <- castSubst sort x zetas;;
+                            pure (app_ref (upSubstRenName x y)
+                                          (List.concat [[nHole];
+                                                       List.map (const nHole) (sty_terms zetas');
+                                                       [nHole; s]])));;
+    (* type *)
+    let ret s := eq_ (app_ref (renName sort)
+                              (List.app (sty_terms zetas)
+                                        [app_ref (substName sort) (List.app (sty_terms sigmas) [s])]))
+                     (app_ref (substName sort) (List.app (sty_terms thetas) [s])) in
+    traversal sort compSubstRenName no_args_default ret (List.concat [bsigmas; bzetas; bthetas; beqs]) [sigmas; zetas; thetas; eqs]
+              (fun n =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [n]))
+              sem_default
+              mapComp_.
+
+    
+  Definition genCompSubstRens := genFixpoint genCompSubstRen.
+End substRen.
+Import substRen.
+
+MetaCoq Run (mkLemmasTyped (genUpSubstRens upList_ty) Hsig_example.mySig env25 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env26").
+
+MetaCoq Run (mkLemmasTyped (genUpSubstRens upList_tm) Hsig_example.mySig env26 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env27").
+
+MetaCoq Run (mkLemmasTyped (genCompSubstRens ("ty", [])) Hsig_example.mySig env27 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env28").
+
+MetaCoq Run (mkLemmasTyped (genCompSubstRens ("tm", ["vl"])) Hsig_example.mySig env28 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env29").
+
+Module substSubst.
+  Import GenM.Notations GenM.
+  
+  Definition upSubstSubstName := upNameGen "up_subst_subst".
+  Definition compSubstSubstName x := sep "compSubstSubst" x.
+
+  Definition genUpSubstSubst (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    '(taus, btaus) <- genSubst "tau" sort;;
+    let '(theta, btheta) := genSubstS "theta" sort in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx
+                             (sigma >>> app_ref (substName sort) (sty_terms taus))
+                             theta in
+    taus' <- upSubst sort [binder] taus;;
+    pat <- patternSId sort binder;;
+    (* type *)
+    let innerType := equiv_ x ((app_ref (upName sort binder) [sigma])
+                                 >>> (app_ref (substName sort) (sty_terms taus')))
+                            (app_ref (upName sort binder) [theta]) in
+    let type := add_tbinders (List.concat [[bsigma]; btaus; [btheta; beq; bx]]) innerType in
+    (* body *)
+    pat' <- comp_ren_or_subst sort (SubstRen pat) taus;;
+    let compRenSubstArgs n := List.concat [ List.map (const (abs_ref "x" eq_refl_)) pat;
+                                          [ nApp sigma [n] ] ] in
+    let innerBodyHelper :=
+        fun n => eq_trans_ (app_ref (compRenSubstName sort) (List.concat [pat; sty_terms taus';
+                                                                      map2 funcomp_ (sty_terms taus') pat;
+                                                                      compRenSubstArgs n]))
+                        (eq_trans_ (eq_sym_ (app_ref (compSubstRenName sort)
+                                                     (List.concat [sty_terms taus; pat; pat';
+                                                                  compRenSubstArgs n])))
+                                   (ap_ (app_ref (renName sort) pat) (nApp eq [n]))) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x innerBodyHelper eq_refl_)
+                                    (innerBodyHelper x) in
+    let body := add_binders (List.concat [[bsigma]; btaus; [btheta; beq; bx]]) innerBody in
+    (* name *)
+    let name := upSubstSubstName sort binder in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genUpSubstSubsts (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpSubstSubst bs)) bss.
+
+  Definition genCompSubstSubst (sort: tId) : t (def nterm) :=
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    '(taus, btaus) <- genSubst "tau" sort;;
+    '(thetas, bthetas) <- genSubst "theta" sort;;
+    sigmatau <- comp_ren_or_subst sort taus sigmas;;
+    '(eqs, beqs) <- genEq "Eq" sort sigmatau (sty_terms thetas)
+                         (fun x y s =>
+                            taus' <- castSubst sort x taus;;
+                            pure (app_ref (upSubstSubstName x y)
+                                          (List.concat [[nHole];
+                                                       List.map (const nHole) (sty_terms taus');
+                                                       [nHole; s]])));;
+    (* type *)
+    let ret s := eq_ (app_ref (substName sort) (List.app (sty_terms taus)
+                                                         [app_ref (substName sort) (List.app (sty_terms sigmas)
+                                                                                             [s])]))
+                     (app_ref (substName sort) (List.app (sty_terms thetas) [s])) in
+    traversal sort compSubstSubstName no_args_default ret (List.concat [bsigmas; btaus; bthetas; beqs]) [sigmas; taus; thetas; eqs]
+              (fun n =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [n]))
+              sem_default
+              mapComp_.
+    
+  Definition genCompSubstSubsts := genFixpoint genCompSubstSubst.
+End substSubst.
+Import substSubst.
+
+MetaCoq Run (mkLemmasTyped (genUpSubstSubsts upList_ty) Hsig_example.mySig env29 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env30").
+
+MetaCoq Run (mkLemmasTyped (genUpSubstSubsts upList_tm) Hsig_example.mySig env30 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env31").
+
+MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("ty", [])) Hsig_example.mySig env31 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env32").
+
+MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("tm", ["vl"])) Hsig_example.mySig env32 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env33").
+
+Module rinstInst.
+  Import GenM.Notations GenM.
+  
+  Definition upRinstInstName := upNameGen "up_rinst_inst".
+  Definition rinstInstFunName x := sep "rinst_inst" x.
+  Definition rinstInstName x := sep "rinstInst" x.
+
+  Definition genUpRinstInst (bs: Binder * tId) : t nlemma :=
+    let '(binder, sort) := bs in
+    let '(xi, bxi) := genRenS "xi" in
+    let '(sigma, bsigma) := genSubstS "sigma" sort in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx (xi >>> app_ref (varConstrName sort) []) sigma in
+    (* type *)
+    let innerType := equiv_ x ((app_ref (upRenName sort binder) [xi])
+                                 >>> (app_ref (varConstrName sort) []))
+                            (app_ref (upName sort binder) [sigma]) in
+    let type := add_tbinders [bxi; bsigma; beq; bx] innerType in
+    (* body *)
+    shift <- patternSId sort binder;;
+    let innerBodyHelper n := ap_ (app_ref (renName sort) shift) (nApp eq [n]) in
+    let innerBody := definitionBody sort binder
+                                    (matchFin_ bx innerType x innerBodyHelper eq_refl_)
+                                    (innerBodyHelper x) in
+    let body := add_binders [bxi; bsigma; beq; bx] innerBody in
+    (* name *)
+    let name := upRinstInstName sort binder in
+    register_name name;;
+    pure (name, type, body).
+    
+  Definition genUpRinstInsts (bss: list (Binder * tId)) : t (list lemma) :=
+    a_map (fun bs => translate_lemma (genUpRinstInst bs)) bss.
+
+  Definition substify (sort: tId) (xis: SubstTy) :=
+    substSorts <- substOf sort;;
+    a_map2 (fun substSort xi =>
+              pure (xi >>> app_ref (varConstrName substSort) []))
+           substSorts (sty_terms xis).
+
+  Definition genRinstInst (sort: tId) : t (def nterm) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    '(sigmas, bsigmas) <- genSubst "sigma" sort;;
+    xis' <- substify sort xis;;
+    '(eqs, beqs) <- genEq "Eq" sort xis' (sty_terms sigmas)
+                         (fun x y s => pure (app_ref (upRinstInstName x y) [nHole; nHole; s]));;
+    let ret s := eq_ (app_ref (renName sort) (List.app (sty_terms xis) [s]))
+                     (app_ref (substName sort) (List.app (sty_terms sigmas) [s])) in
+    traversal sort rinstInstFunName no_args_default ret (List.concat [bxis; bsigmas; beqs]) [xis; sigmas; eqs]
+              (fun n =>
+                 toVarT <- toVar sort eqs;;
+                 pure (nApp toVarT [n]))
+              sem_default
+              mapComp_.
+    
+  Definition genRinstInsts := genFixpoint genRinstInst.
+
+  Definition introSortVar (name: string) (sort: tId) : nterm * (string * nterm) :=
+    (nRef name, (name, app_ref sort [])).
+
+  Definition genLemmaRinstInst (sort: tId) :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    xis_subst <- substify sort xis;;
+    let '(x, bx) := introSortVar "x" sort in
+    (* type *)
+    let innerType := eq_ (app_ref (renName sort) (List.app (sty_terms xis) [x]))
+                         (app_ref (substName sort) (List.app xis_subst [x])) in
+    let type := add_tbinders (List.app bxis [bx]) innerType in
+    (* body *)
+    substSorts <- substOf sort;;
+    let innerBody := app_ref (rinstInstFunName sort)
+                             (List.concat [sty_terms xis;
+                                          List.map (const nHole) substSorts;
+                                          List.map (const (abs_ref "x" eq_refl_)) substSorts;
+                                          [ x ]]) in
+    let body := add_binders (List.app bxis [bx]) innerBody in
+    (* name *)
+    let name := rinstInstName sort in
+    register_name name;;
+    pure (name, type, body).
+                
+  Definition genLemmaRinstInsts (sorts: list tId) : t (list lemma) :=
+    a_map (fun sort => translate_lemma (genLemmaRinstInst sort)) sorts.
+End rinstInst.
+Import rinstInst.
+
+MetaCoq Run (mkLemmasTyped (genUpRinstInsts upList_ty) Hsig_example.mySig env33 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env34").
+
+MetaCoq Run (mkLemmasTyped (genUpRinstInsts upList_tm) Hsig_example.mySig env34 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env35").
+
+MetaCoq Run (mkLemmasTyped (genRinstInsts ("ty", [])) Hsig_example.mySig env35 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env36").
+
+MetaCoq Run (mkLemmasTyped (genRinstInsts ("tm", ["vl"])) Hsig_example.mySig env36 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env37").
+
+MetaCoq Run (mkLemmasTyped (genLemmaRinstInsts ["ty"]) Hsig_example.mySig env37 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env38").
+
+MetaCoq Run (mkLemmasTyped (genLemmaRinstInsts ["tm"; "vl"]) Hsig_example.mySig env38 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env39").
+
+Module instId.
+  Import GenM.Notations GenM.
+  
+  Definition rinstIdName x := sep "rinstId" x.
+  Definition instIdName x := sep "instId" x.
+  MetaCoq Quote Definition eq_ind_r_q := @eq_ind_r.
+  Definition eq_ind_r_ p px eqyx := nApp (nTerm eq_ind_r_q) [nHole; nHole; p; px; nHole; eqyx ].
+
+  Definition genLemmaInstId (sort: tId) : t nlemma :=
+    substSorts <- substOf sort;;
+    vars <- mk_var_apps sort;;
+    let '(s, bs) := introSortVar "s" sort in
+    (* type *)
+    let innerType := eq_ (app_ref (substName sort) (List.app vars [s])) s in
+    let type := add_tbinders [bs] innerType in
+    (* body *)
+    let innerBody := app_ref (idSubstName sort)
+                             (List.concat [vars;
+                                          List.map (const (abs_ref "x" eq_refl_)) substSorts;
+                                          [s]]) in
+    let body := add_binders [bs] innerBody in
+    (* name *)
+    let name := instIdName sort in
+    register_name name;;
+    pure (name, type, body).
+
+  Definition genLemmaInstIds (sorts: list tId) : t (list lemma) :=
+    a_map (fun sort => translate_lemma (genLemmaInstId sort)) sorts.
+
+  Definition genLemmaRinstId (sort: tId) : t nlemma :=
+    substSorts <- substOf sort;;
+    vars <- mk_var_apps sort;;
+    let ids := List.map (const id_) substSorts in
+    let '(s, bs) := introSortVar "s" sort in
+    (* type *)
+    let innerType := eq_ (app_ref (renName sort) (List.app ids [s])) s in
+    let type := add_tbinders [bs] innerType in
+    (* body *)
+    let innerBody := eq_ind_r_ (abs_ref "t" (eq_ (nRef "t") s))
+                               (app_ref (instIdName sort) [s])
+                               (app_ref (rinstInstName sort) (List.app ids [s])) in
+    let body := add_binders [bs] innerBody in
+    (* name *)
+    let name := rinstIdName sort in
+    register_name name;;
+    pure (name, type, body).
+                         
+  Definition genLemmaRinstIds (sorts: list tId) : t (list lemma) :=
+    a_map (fun sort => translate_lemma (genLemmaRinstId sort)) sorts.
+End instId.
+Import instId.
+
+MetaCoq Run (mkLemmasTyped (genLemmaInstIds ["ty"]) Hsig_example.mySig env39 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env40").
+
+MetaCoq Run (mkLemmasTyped (genLemmaInstIds ["tm"; "vl"]) Hsig_example.mySig env40 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env41").
+
+MetaCoq Run (mkLemmasTyped (genLemmaRinstIds ["ty"]) Hsig_example.mySig env41 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env42").
+
+MetaCoq Run (mkLemmasTyped (genLemmaRinstIds ["tm"; "vl"]) Hsig_example.mySig env42 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env43").
+
+Module compRenRen.
+  Import GenM.Notations GenM.
+  Definition funcomps_ ss ts := map2 funcomp_ (sty_terms ss) (sty_terms ts).
+  Notation "tt <<>> ss" := (funcomps_ ss tt) (at level 70, no associativity).
+
+  Definition renRenName x := sep "renRen" x.
+
+  Definition genLemmaCompRenRen (sort: tId) : t nlemma :=
+    '(xis, bxis) <- genRen "xi" sort;;
+    '(zetas, bzetas) <- genRen "zeta" sort;;
+    let sigmazeta := xis <<>> zetas in
+    substSorts <- substOf sort;;
+    let '(s, bs) := introSortVar "s" sort in
+    (* type *)
+    let innerType := eq_ (app_ref (renName sort)
+                                  (List.app (sty_terms zetas)
+                                            [ app_ref (renName sort) (List.app (sty_terms xis) [s]) ]))
+                         (app_ref (renName sort)
+                                  (List.app sigmazeta [s])) in
+    let type := add_tbinders (List.concat [bxis; bzetas; [bs]]) innerType in
+    (* body *)
+    let innerBody := app_ref (compRenRenName sort)
+                             (List.concat [ sty_terms xis;
+                                          sty_terms zetas;
+                                          List.map (const nHole) substSorts;
+                                          List.map (const (abs_ref "x" eq_refl_)) substSorts;
+                                          [s]]) in
+    let body := add_binders (List.concat [bxis; bzetas; [bs]]) innerBody in
+    (* name *)
+    let name := renRenName sort in
+    pure (name, type, body).
+    
+  Definition genLemmaCompRenRens (sorts: list tId) : t (list lemma) :=
+    a_map (fun sort => translate_lemma (genLemmaCompRenRen sort)) sorts.
+End compRenRen.
+Import compRenRen.
+
+MetaCoq Run (mkLemmasTyped (genLemmaCompRenRens ["ty"]) Hsig_example.mySig env43 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env44").
+
+MetaCoq Run (mkLemmasTyped (genLemmaCompRenRens ["tm"; "vl"]) Hsig_example.mySig env44 >>= tmEval TemplateMonad.Common.all >>= tmDefinition "env45").
+
+(* MetaCoq Run (match GenM.run (genUpExts upList_ty) (Hsig_example.mySig, env13) empty_state with *)
+(*              | inr (_, _, x) => *)
+(*                tmEval TemplateMonad.Common.all x >>= tmPrint *)
+(*              | _ => tmFail "fail" *)
+(*              end). *)
+
+(* TODO better document the way to debug this.
+ * you can set everything opaque except the thing you want to see the AST of *)
+(*
+Module foo.
+  From ASUB Require Import unscoped.
+  Opaque ren_ty.
+  Opaque ap.
+  Opaque shift.
+  Opaque up_ty_ty.
+  
+ Lemma upId_ty_ty (sigma : nat -> ty) (Eq : forall x, sigma x = var_ty x) :
+  forall n, up_ty_ty sigma n = var_ty n.
+Proof.
+exact (fun n =>
+       match n with
+       | S n' => ap (ren_ty shift) (Eq n')
+       | O => eq_refl
+       end).
+Qed.
+
+MetaCoq Quote Definition foo_source := Eval compute in upId_ty_ty.
+End foo.
+ *)
+
+Definition generate (env: SFMap.t term) (component: NEList.t tId) (upList: list (Binder * tId)) : TemplateMonad (SFMap.t term) :=
+  let s := Hsig_example.mySig in
+  let componentL := NEList.to_list component in
+  (** * Inductive Types *)
+  (* generate the inductive types *)
+  env <- mkInductive s componentL env;;
+  (** * Congruence Lemmas *)
+  (* if we generate multiple lemmas we need to keep updating the environment in a fold *)
+  env <- tm_foldM (fun env sort => mkLemmasTyped (genCongruences sort) s env) componentL env;;
+  (* TODO check if component has binders
+   * should probably use a nonempty list for the component then *)
+  (** * Renamings *)
+  env <- mkLemmasTyped (genUpRens upList) s env;;
+  env <- mkLemmasTyped (genRenamings component) s env;;
+  (** * Substitutions *)
+  env <- mkLemmasTyped (genUps upList) s env;;
+  env <- mkLemmasTyped (genSubstitutions component) s env;;
+  (** * idSubst *)
+  env <- mkLemmasTyped (genUpIds upList) s env;;
+  env <- mkLemmasTyped (genIdLemmas component) s env;;
+  (** * Extensionality *)
+  env <- mkLemmasTyped (genUpExtRens upList) s env;;
+  env <- mkLemmasTyped (genExtRens component) s env;;
+  env <- mkLemmasTyped (genUpExts upList) s env;;
+  env <- mkLemmasTyped (genExts component) s env;;
+  (** * renRen *)
+  env <- mkLemmasTyped (genUpRenRens upList) s env;;
+  (** VarL Lemmas *)
+  (* varSorts := ... *)
+  tmReturn env.
+
+Compute upList_tm.
+
+Module generation.
+  (* Compute (GenM.run (genUpRens upList_ty) Hsig_example.mySig empty_state). *)
+  Time MetaCoq Run (generate initial_env ("ty",[]) upList_ty >>= tmEval lazy >>= tmDefinition "env0").
+
+  Time MetaCoq Run (generate env0 ("tm", ["vl"]) upList_tm >>= tmEval lazy >>= tmDefinition "env1").
+End generation.
+
+
