@@ -1,7 +1,7 @@
 Require Import String Arith List.
 Import ListNotations.
 
-From ASUB Require Import Language Utils Quotes GallinaGen.
+From ASUB Require Import Language Utils Quotes GallinaGen SubstTy Names.
 From MetaCoq.Template Require Import Ast.
 
 Open Scope string.
@@ -69,3 +69,11 @@ Definition bparameters (binder: Binder) : list term * list (term -> term) :=
   (* | BinderList (m, _) -> ([ref_ m], [binder1_ ~implicit:true ~btype:nat_ m]) *)
   end.
 
+
+(* TODO make genRenS and genSubstS return a list of binders *)
+Definition genRenS (name: string) := (nRef name, (name, nArr nat_ nat_)).
+
+Definition genRen2 (name: string) (sort: tId) (substSorts: list tId) : SubstTy * list (string * nterm) :=
+  let names := List.map (sep name) substSorts in
+  let binders := List.map (fun name => (name, nArr nat_ nat_)) names in
+  (SubstRen (List.map nRef names), binders).
