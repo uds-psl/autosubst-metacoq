@@ -157,6 +157,14 @@ Definition cartesian_product {A: Type} (xs ys: list A) : list (A * A) :=
                app c pairs)
             xs [].
 
+Fixpoint list_fill {A: Type} (a: A) (n: nat) : list A :=
+  match n with
+  | O => []
+  | S n => a :: list_fill a n
+  end.
+
+Definition const {A B} (a: A) (b: B) : A := a.
+
 (* Require Import Structures.OrderedTypeEx FSets.  *)
 (* (* a.d. TODO I would rather use MSets instead of FSets since they are recommended but MSets uses a different OrderedType module and there is no String_as_OT for it *) *)
 (* (* Module A : Structures.Orders.OrderedType := String_as_OT. *) *)

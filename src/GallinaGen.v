@@ -1,6 +1,7 @@
-From MetaCoq.Template Require Import All.
 Require Import String List.
-From ASUB Require Import GenM AssocList DeBruijnMap.
+
+From MetaCoq.Template Require Import All.
+From ASUB Require Import GenM AssocList DeBruijnMap Language TemplateMonadUtils.
 
 (* TODO add another node for embedded terms. This should be a bit more performant when we use predefined terms like "eq" since we don't really need to look them up in the environment. *)
 Inductive nterm : Type :=
@@ -146,3 +147,7 @@ Definition translate_lemma (l: GenM.t (string * nterm * nterm)) : GenM.t (string
   ttype <- translate DB.empty ntype;;
   tbody <- translate DB.empty nbody;;
   pure (lname, ttype, tbody).
+
+Definition nlemma : Type := string * nterm * nterm.
+Definition lemma : Type := string * term * term.
+

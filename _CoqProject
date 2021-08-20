@@ -1,10 +1,14 @@
 -Q . ASUB
 
-listimport/samefile.v
-listimport/importfile1.v
-listimport/importfile2.v
-listimport/localimport1.v
-listimport/localimport2.v
+# listimport/samefile.v
+# listimport/importfile1.v
+# listimport/importfile2.v
+# listimport/localimport1.v
+# listimport/localimport2.v
+# listimport/myrewrite1.v
+# listimport/myrewrite2.v
+
+# pocs/arguments.v
 
 src/static/core.v
 src/static/fintype.v

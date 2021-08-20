@@ -6,6 +6,7 @@ MetaCoq Quote Definition eq_q := @eq.
 MetaCoq Quote Definition eq_trans_q := @eq_trans.
 MetaCoq Quote Definition eq_sym_q := @eq_sym.
 MetaCoq Quote Definition eq_refl_q := @eq_refl.
+MetaCoq Quote Definition eq_ind_r_q := @eq_ind_r.
 MetaCoq Quote Definition f_equal_q := @f_equal.
 MetaCoq Quote Definition up_ren_q := up_ren.
 MetaCoq Quote Definition funcomp_q := @funcomp.
