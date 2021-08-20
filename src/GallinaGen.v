@@ -151,3 +151,7 @@ Definition translate_lemma (l: GenM.t (string * nterm * nterm)) : GenM.t (string
 Definition nlemma : Type := string * nterm * nterm.
 Definition lemma : Type := string * term * term.
 
+#[ local ]
+ Open Scope type.
+Definition boundVariable := string * nterm.
+

@@ -124,12 +124,8 @@ Definition buildFixpoint (fixBodies: list (def nterm)) (isRec: bool) : t (list l
   pure (map2 (fun name t => (name, hole, t)) fixNames fixExprs).
 
 (* TODO make genRenS and genSubstS return a list of binders *)
-Definition genRenS (name: string) := (nRef name, (name, nArr nat_ nat_)).
-
-Definition genRen2 (name: string) (sort: tId) (substSorts: list tId) : SubstTy * list (string * nterm) :=
-  let names := List.map (sep name) substSorts in
-  let binders := List.map (fun name => (name, nArr nat_ nat_)) names in
-  (SubstRen (List.map nRef names), binders).
+Definition genRenS (name: string) : nterm * (string * nterm) :=
+  (nRef name, (name, nArr nat_ nat_)).
 
 Definition genRen (name: string) (sort: tId) : t (SubstTy * list (string * nterm)) :=
   substSorts <- substOf sort;;
@@ -137,9 +133,16 @@ Definition genRen (name: string) (sort: tId) : t (SubstTy * list (string * nterm
   let binders := List.map (fun name => (name, nArr nat_ nat_)) names in
   pure (SubstRen (List.map nRef names), binders).
 
+Definition genRen2 (name: string) (sort: tId) (substSorts: list tId) : SubstTy * list (string * nterm) :=
+  let names := List.map (sep name) substSorts in
+  let binders := List.map (fun name => (name, nArr nat_ nat_)) names in
+  (SubstRen (List.map nRef names), binders).
+
+
 (* TODO first component should be nterm directly? *)
 Definition genSubstS (name: string) (sort: tId) : nterm * (string * nterm) :=
   (nRef name, (name, nArr nat_ (nRef sort))).
+
 Definition genSubst (name: string) (sort: tId) :=
   substSorts <- substOf sort;;
   let names := List.map (sep name) substSorts in
@@ -149,6 +152,7 @@ Definition genSubst (name: string) (sort: tId) :=
 Definition genEqS (name: string) (bn: string * nterm) (sigma tau: nterm) : nterm * (string * nterm) :=
   let '(n, nt) := bn in
   (nRef name, (name, nProd n nt (equiv_ (nRef n) sigma tau))).
+
 Definition genEq (name: string) (sort: tId) (sigmas taus: list nterm) (f: string -> Binder -> nterm -> t nterm) :=
   substSorts <- substOf sort;;
   let names := List.map (sep name) substSorts in

@@ -1,5 +1,7 @@
 Require Import List String.
 Import ListNotations.
+
+#[ local ]
 Open Scope string.
 
 From MetaCoq.Template Require Import All.
@@ -426,13 +428,13 @@ Module idsubsts.
   Definition genUpId (bs: Binder * tId) : t nlemma :=
     let '(binder, sort) := bs in
     let '(sigma, bsigma) := genSubstS "sigma" sort in
-    let '(n, bn) := introDBVar "n" in
-    let '(eq, beq) := genEqS "Eq" bn sigma (nRef (varConstrName sort)) in
+    let '(x, bx) := introDBVar "x" in
+    let '(eq, beq) := genEqS "Eq" bx sigma (nRef (varConstrName sort)) in
     (** * type *)
-    let innerType := equiv_ n
+    let innerType := equiv_ x
                        (nApp (nRef (upName sort binder)) [ sigma ])
                        (nRef (varConstrName sort)) in
-    let type := add_tbinders [ bsigma; beq; bn ] innerType in
+    let type := add_tbinders [ bsigma; beq; bx ] innerType in
     (** * body *)
     shift <- patternSId sort binder;;
     hasRen <- hasRenaming sort;;
@@ -440,8 +442,8 @@ Module idsubsts.
                ap_ (nApp (nRef (if hasRen then renName sort else substName sort)) shift)
                    (nApp eq [ n ]) in
     let innerBody := definitionBody sort binder
-                                    (matchFin_ bn innerType n t eq_refl_) (t n) in
-    let body := add_binders [ bsigma; beq; bn ] innerBody in
+                                    (matchFin_ bx innerType x t eq_refl_) (t x) in
+    let body := add_binders [ bsigma; beq; bx ] innerBody in
     (** * name *)
     let name := upIdName sort binder in
     register_name name;;

@@ -3,6 +3,10 @@ Require Import List.
 Import ListNotations.
 From ASUB Require Import Utils GallinaGen Termutil SubstTy.
 
+#[ local ]
+ Open Scope type.
+
+
 Inductive ScopeVar : Set := K | L | M.
 Inductive ScopeVars : Set := KS | LS | MS.
 Inductive RenVar : Set :=
@@ -52,13 +56,15 @@ Check ([ K; XI K L; XIS KS LS ] : list VarSpec).
 
 Definition genVariableShape (var_spec: VarSpec) : Type :=
   match var_spec with
-  | scopeVar _ | renVar _ => nterm 
+  | scopeVar _ | renVar _ => nterm
   | scopeVars _ | renVars _ => SubstTy
   end.
 
-#[ local ]
- Open Scope type.
-Definition boundVariable := string * nterm.
+Definition genVariableShapeShort (var_spec: VarSpec) : Type :=
+  match var_spec with
+  | scopeVar _ | renVar _ => nterm * boundVariable
+  | scopeVars _ | renVars _ => SubstTy * list boundVariable
+  end.
 
 (* TODO should use NEList.t instead of list so that I don't get the default argument in fold_list *)
 (* TODO since I don't think I can use fold_left for the definitions, I would have to use normal lists. But can I define my own pair type that is right associative to make it easier? *)
@@ -82,7 +88,7 @@ Fixpoint genVariableShapesShort' (init: Type) (var_specs: list VarSpec): Type :=
   match var_specs with
   | [] => init
   | v :: var_specs =>
-    let t := genVariableShape v in
+    let t := genVariableShapeShort v in
     genVariableShapesShort' (init * t) var_specs
   end.
 
@@ -90,7 +96,7 @@ Definition genVariableShapesShort (var_specs: list VarSpec) : Type :=
   match var_specs with
   | [] => unit
   | v :: var_specs =>
-    genVariableShapesShort' (genVariableShape v) var_specs
+    genVariableShapesShort' (genVariableShapeShort v) var_specs
   end.
 
 (* schachtelung anders rum durch akkumulierendes Argument. wie beihttps://github.com/mit-plv/engine-bench/pull/4 *)
@@ -116,6 +122,14 @@ Definition genVariable (sort: string) (var_spec: VarSpec) : (genVariableShape va
   | scopeVar _ => (nRef "scope", [])
   | scopeVars _ => (SubstScope ["m_ty"; "m_vl"] [nRef "m_ty"; nRef "m_vl"], [])
   | renVar _ => (nRef "ren", [])
+  | renVars _ => genRen2 "xi" "tm" ["ty"; "vl"]
+  end.
+
+Definition genVariableShort (sort: string) (var_spec: VarSpec) : genVariableShapeShort var_spec :=
+  match var_spec as var_spec' return genVariableShapeShort var_spec' with
+  | scopeVar _ => (nRef "scope", ("test", nRef "scope"))
+  | scopeVars _ => (SubstScope ["m_ty"; "m_vl"] [nRef "m_ty"; nRef "m_vl"], [])
+  | renVar _ => (nRef "ren", ("test", nRef "ren"))
   | renVars _ => genRen2 "xi" "tm" ["ty"; "vl"]
   end.
 
@@ -174,32 +188,30 @@ Fixpoint genVariablesFold' {A:Type} (sort: string) (init: A) (var_specs: list Va
 Definition genVariablesFold (sort: string) (var_specs: list VarSpec) : (genVariableShapesFold unit var_specs) * list boundVariable :=
   @genVariablesFold' unit sort tt var_specs.
 
-Fixpoint genVariablesShort' {A:Type} (sort: string) (init: A) (var_specs: list VarSpec) {struct var_specs} : (genVariableShapesShort' A var_specs) * list boundVariable.
+Fixpoint genVariablesShort' {A:Type} (sort: string) (init: A) (var_specs: list VarSpec) {struct var_specs} : (genVariableShapesShort' A var_specs).
 Proof.
   refine (match var_specs with
-          | [] => (init, [])
+          | [] => init
           | v :: var_specs0 => _
          end).
   refine (
-    let '(t, bs) := genVariable sort v in
-    let '(ts, bs') := genVariablesShort' (A * genVariableShape v) sort (init, t) var_specs0 in
+    let t := genVariableShort sort v in
+    let ts := genVariablesShort' (A * genVariableShapeShort v) sort (init, t) var_specs0 in
     _).
-  split.
-  2: exact (List.app bs bs').
   exact ts.
 Defined.
 
-Definition genVariablesShort (sort: string) (var_specs: list VarSpec) : (genVariableShapesShort var_specs) * list boundVariable.
+Definition genVariablesShort (sort: string) (var_specs: list VarSpec) : genVariableShapesShort var_specs.
 Proof.
   refine (match var_specs with
-          | [] => (tt, [])
+          | [] => tt
           | v :: var_specs => _
          end).
   refine (
-  let '(t, bs) := genVariable sort v in
-  let '(ts, bs') := genVariablesShort' sort t var_specs in
+  let t := genVariableShort sort v in
+  let ts := genVariablesShort' sort t var_specs in
   _).
-  exact (ts, List.app bs bs').
+  exact ts.
 Defined.
 
 Check ZETA K L.
@@ -279,7 +291,7 @@ Compute genVariableShapesShort [ K; L; KS; LS; XI K L; ZETA K L; XIS KS LS; ZETA
 
 (* DONE now it finally works.  *)
 Definition genTestMatchShort (_: unit) : nterm :=
-  let '(k, l, ks, ls, xi, zeta, xis, zetas, bs) :=
+  let '((k, bk), (l, bl), (ks, bks), (ls, bls), (xi, bxi), (zeta, bzeta), (xis, bxis), (zetas, bzetas)) :=
       genVariablesShort "asd" [ K; L; KS; LS; XI K L; ZETA K L; XIS KS LS; ZETAS KS LS ] in
   nApp k (List.concat [ [l]; sty_terms ks; sty_terms ls; [xi]; [zeta]; sty_terms xis; sty_terms zetas]).
 
