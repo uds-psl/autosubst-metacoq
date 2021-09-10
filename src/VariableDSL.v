@@ -57,13 +57,13 @@ Check ([ K; XI K L; XIS KS LS ] : list VarSpec).
 Definition genVariableShape (var_spec: VarSpec) : Type :=
   match var_spec with
   | scopeVar _ | renVar _ => nterm
-  | scopeVars _ | renVars _ => SubstTy
+  | scopeVars _ | renVars _ => substTy
   end.
 
 Definition genVariableShapeShort (var_spec: VarSpec) : Type :=
   match var_spec with
   | scopeVar _ | renVar _ => nterm * boundVariable
-  | scopeVars _ | renVars _ => SubstTy * list boundVariable
+  | scopeVars _ | renVars _ => substTy * list boundVariable
   end.
 
 (* TODO should use NEList.t instead of list so that I don't get the default argument in fold_list *)

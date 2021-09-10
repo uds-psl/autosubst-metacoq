@@ -177,6 +177,17 @@ End FMap.
 (* Module SFMap := FMap MyStringOT. *)
 Module SFMap := FMap String_Discrete.
 
+
+(* TODO tried using the balanced search tree from the library
+ * for the implicit-map. It should balance itself and I expected it
+ * to be fast.
+ * However, it was unusably slow *)
+(* Require FSets.FMapAVL. *)
+(* Require Import Structures.OrderedTypeEx. *)
+
+(* Module SFMapfast := FMapAVL.Make String_as_OT. *)
+
+
 Module FSet (X: Discrete).
 
   Definition elt := X.t.

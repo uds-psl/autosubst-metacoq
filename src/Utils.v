@@ -163,6 +163,9 @@ Fixpoint list_fill {A: Type} (a: A) (n: nat) : list A :=
   | S n => a :: list_fill a n
   end.
 
+Definition guard {A} (b: bool) (l: list A) :=
+  if b then l else [].
+
 Definition const {A B} (a: A) (b: B) : A := a.
 
 (* Require Import Structures.OrderedTypeEx FSets.  *)

@@ -21,6 +21,12 @@ Definition from_list {A: Type} (l: list A) : option (t A) :=
   | a :: l => Some (a, l)
   end.
 
+Definition from_list' {A: Type} (l: list A) : match l with [] => list A | _ :: _ => (t A) end :=
+  match l with
+  | [] => []
+  | a :: l => (a, l)
+  end.
+
 Definition map {A B: Type} (f: A -> B) (ne: t A) : t B :=
   let '(x, l) := ne in
   (f x, List.map f l).
