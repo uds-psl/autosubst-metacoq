@@ -191,7 +191,7 @@ End inductives.
 Import inductives.
 
 (* Definition default_flags := {| fl_scope_type := Wellscoped |}. *)
-MetaCoq Run (mkInductive (genMutualInductive (NEList.from_list' ["ty"%string])) default_flags Hsig_example.mySig {| in_env := GenM.initial_env; in_implicits := SFMap.empty _ |}
+MetaCoq Run (mkInductive (genMutualInductive (NEList.from_list' ["ty"%string])) default_flags Hsig_example.mySig {| in_env := GenM.initial_env; in_implicits := SFMap.empty |}
                          >>= tmEval TemplateMonad.Common.all
                          >>= mkInductive (genMutualInductive (NEList.from_list' ["tm"; "vl"])) default_flags Hsig_example.mySig
                          >>= composeGeneration "env0").

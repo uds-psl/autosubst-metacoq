@@ -8,7 +8,7 @@ From ASUB Require Import Monad Language AssocList Utils TemplateMonadUtils Quote
 
 Record State := { st_names : list string; st_implicits : SFMap.t nat }.
 
-Definition empty_state := {| st_names := []; st_implicits := SFMap.empty _ |}.
+Definition empty_state := {| st_names := []; st_implicits := SFMap.empty |}.
 Definition initial_state (implicits: SFMap.t nat) := {| st_names := []; st_implicits := implicits |}.
 
 Definition initial_env := SFMap.fromList [("nat", nat_q); ("option", option_q); ("S", S_q)].
@@ -62,11 +62,11 @@ Module GenM.
 
   Definition register_implicits (name: string) (implicit_num: nat) : t unit :=
     state <- get;;
-    put {| st_names := state.(st_names); st_implicits := SFMap.add name implicit_num state.(st_implicits) |}.
+    put {| st_names := state.(st_names); st_implicits := SFMap.add state.(st_implicits) name implicit_num |}.
 
   Definition get_implicits (name: string) : t nat :=
     state <- get;;
-    match SFMap.find name state.(st_implicits) with
+    match SFMap.find state.(st_implicits) name with
     | None => pure 0
     | Some n => pure n
     end.
