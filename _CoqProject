@@ -20,12 +20,15 @@ src/Utils.v
 src/NEList.v
 src/Names.v
 src/SubstTy.v
+src/Flags.v
+src/Nterm.v
+src/GenUps.v
 # src/VariableDSL.v
 src/TemplateMonadUtils.v
 src/AssocList.v
 src/Language.v
 # src/parsers/NotationParser.v
-# src/parsers/CustomEntryParser.v
+src/parsers/CustomEntryParser.v
 # src/parsers/InductiveParser.v
 src/Quotes.v
 src/Termutil.v

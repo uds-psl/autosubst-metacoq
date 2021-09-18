@@ -4,8 +4,7 @@ Import ListNotations.
  Open Scope string.
 
 From MetaCoq.Template Require Import All.
-Import MonadNotation.
-From ASUB Require Import Monad Language AssocList Utils TemplateMonadUtils Quotes.
+From ASUB Require Import Monad Language AssocList Utils TemplateMonadUtils Quotes Flags.
 
 Record State := { st_names : list string; st_implicits : SFMap.t nat }.
 
@@ -14,16 +13,6 @@ Definition initial_state (implicits: SFMap.t nat) := {| st_names := []; st_impli
 
 Definition initial_env := SFMap.fromList [("nat", nat_q); ("option", option_q); ("S", S_q)].
 
-
-Inductive scope_type := Unscoped | Wellscoped.
-Definition is_wellscoped (s: scope_type) :=
-  match s with
-  | Wellscoped => true
-  | Unscoped => false
-  end.
-
-Record Flags := { fl_scope_type : scope_type }.
-Definition default_flags := {| fl_scope_type := Unscoped |}.
 
 Record R' := { R_flags : Flags; R_sig: Signature; R_env : SFMap.t term }.
 
@@ -106,6 +95,11 @@ Module GenM.
     | Some sorts => pure sorts
     | None => error ("substOf called with unknown sort")
     end.
+
+  (** check if a sort has a substitution vector *)
+  Definition hasSubsts (sort: tId) : t bool :=
+    substSorts <- substOf sort;;
+    pure (negb (list_empty substSorts)).
 
   (** check if a sort is open (has a variable constructor) *)
   Definition isOpen (sort: tId) : t bool :=

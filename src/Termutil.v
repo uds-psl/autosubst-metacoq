@@ -4,7 +4,7 @@ Import ListNotations.
  Open Scope string.
 
 From MetaCoq.Template Require Import Ast.
-From ASUB Require Import Language Utils Quotes GallinaGen SubstTy Names GenM DeBruijnMap AssocList.
+From ASUB Require Import Language Utils Quotes Nterm GallinaGen SubstTy Names GenM DeBruijnMap AssocList Flags.
 Import GenM.Notations GenM.
 
 
@@ -173,7 +173,8 @@ Definition buildFixpoint (fixBodies: list (def nterm)) (isRec: bool) : t (list l
   register_names fixNames;;
   let fixExprs :=  mapi (fun n _ => nFix fixBodies n) fixBodies in
   fixExprs <- a_map translate fixExprs;;
-  pure (map2 (fun name t => (name, hole, t)) fixNames fixExprs).
+  types <- a_map translate (List.map dtype fixBodies);;
+  pure (map2 (fun name '(t, typ) => (name, typ, t)) fixNames (List.combine fixExprs types)).
 
 Definition renT (st: scope_type) (m n: nterm) :=
   match st with
@@ -254,17 +255,18 @@ Definition introSortVar (name: string) (ms: substScope) (sort: tId) : t (nterm *
   pure (nRef name, explArg name (app_sort sort scope_type ms)).
 
 
-Definition shift (hasRen: bool) (substSorts: list tId) (sort: tId) :=
+Definition shift (hasRen: bool) (sc: scope_type) (substSorts: list tId) (sort: tId) :=
   if hasRen
   then shift_
-  else funcomp_ shift_ (nApp (var_constr sort) (List.map (fun _ => nHole) substSorts)).
+  else funcomp_ (app_constr (varConstrName sort) sc (SubstScope (List.map (const "_") substSorts) (List.map (fun _ => nHole) substSorts)) []) shift_.
 
 Definition patternSId (sort: tId) (binder: Binder) :=
   substSorts <- substOf sort;;
   hasRen <- hasRenaming sort;;
+  scope_type <- get_scope_type;;
   up sort (fun substSort b _ => match b with
                              | Single bsort =>
-                               if eqb substSort bsort then shift hasRen substSorts substSort else id_
+                               if eqb substSort bsort then shift hasRen scope_type substSorts substSort else id_
                              end)
      (List.map nRef substSorts) binder.
 
@@ -515,3 +517,9 @@ Definition succ_ (n: nterm) (sort: tId) (binder: Binder) :=
                        then S_ n
                        else n
   end.
+
+Definition genFixpoint (genF : tId -> t (def nterm)) (component: NEList.t tId) : t (list lemma) :=
+  let componentL := NEList.to_list component in
+  isRec <- isRecursive component;;
+  fexprs <- a_map genF componentL;;
+  buildFixpoint fexprs isRec.

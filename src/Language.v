@@ -1,7 +1,7 @@
 (* Here I define the spec like that holds all the data for the code we want to generate *)
 Require Import String List.
 Import ListNotations.
-From ASUB Require Import AssocList Utils NEList.
+From ASUB Require Import AssocList Utils NEList Nterm.
 From MetaCoq.Template Require Import All.
 
 Notation tId := string.
@@ -15,7 +15,7 @@ Inductive Binder :=
 
 Inductive ArgumentHead :=
 | Atom : tId -> ArgumentHead
-| FunApp : fId -> option term -> list ArgumentHead -> ArgumentHead.
+| FunApp : fId -> list nterm -> list ArgumentHead -> ArgumentHead.
   
 Definition getBinders b :=
   match b with
@@ -151,8 +151,8 @@ Module Hsig_fol.
                                                |}; {|
                                                con_parameters := [("p","nat")];
                                                con_name := "Pred";
-                                               (* con_positions := [ {| pos_binders := []; pos_head := FunApp "cod" (Some (app1_ (ref_ "fin") (ref_ "p"))), [ Atom "term" ]); |}] *)
-                                               con_positions := [ {| pos_binders := []; pos_head := Atom "term" |}]
+                                               con_positions := [ {| pos_binders := []; pos_head := FunApp "cod" [nApp (nRef "fin") [nRef "p"]] [ Atom "term" ] |} ]
+                                               (* con_positions := [ {| pos_binders := []; pos_head := Atom "term" |}] *)
                                              |}; {|
                                                con_parameters := [];
                                                con_name := "Impl";
@@ -182,8 +182,8 @@ Module Hsig_fol.
                                     ); ("term", [ {|
                                                     con_parameters := [("f","nat")];
                                                     con_name := "Func";
-                                                    (* con_positions := [ {|pos_binders := []; pos_head := FunApp ("cod", Some (app1_ (ref_ "fin") (ref_ "f")), [Atom "term"]); |} ] *)
-                                                    con_positions := [ {|pos_binders := []; pos_head := Atom "term" |} ]
+                                                    con_positions := [ {|pos_binders := []; pos_head := FunApp "cod" [nApp (nRef "fin") [nRef "f"]] [Atom "term"] |} ]
+                                                    (* con_positions := [ {|pos_binders := []; pos_head := Atom "term" |} ] *)
                                        |} ] )
                                   ].
 

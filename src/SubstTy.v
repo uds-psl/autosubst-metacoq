@@ -1,7 +1,7 @@
 Require Import String List.
 Import ListNotations.
 
-From ASUB Require Import GallinaGen Language GenM Utils Names.
+From ASUB Require Import Nterm Language GenM Utils Names.
 
 
 Inductive substScope := SubstScope : list string -> list nterm -> substScope.

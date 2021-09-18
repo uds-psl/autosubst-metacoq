@@ -3,36 +3,8 @@ Import ListNotations.
 #[ local ]
  Open Scope string.
 
-From MetaCoq.Template Require Import All.
-From ASUB Require Import GenM AssocList DeBruijnMap Language TemplateMonadUtils Utils.
-
-(* TODO add another node for embedded terms. This should be a bit more performant when we use predefined terms like "eq" since we don't really need to look them up in the environment. *)
-Inductive nterm : Type :=
-| nRef : string -> nterm (* turns into tRel, tConst, tInd, tConstruct from the normal term type *)
-| nHole : nterm
-| nTerm : term -> nterm
-| nProd : string -> nterm -> nterm -> nterm
-| nArr : nterm -> nterm -> nterm
-| nLambda : string -> nterm -> nterm -> nterm
-| nApp : nterm -> list nterm -> nterm
-| nFix : mfixpoint nterm -> nat -> nterm
-| nCase : string -> nat -> nterm -> nterm -> list (nat * nterm) -> nterm.
-
-Definition nlemma : Type := string * nterm * nterm.
-Definition lemma : Type := string * term * term.
-
-Fixpoint mknArr (nt0: nterm) (nts: list nterm) :=
-  match nts with
-  | [] => nt0
-  | nt :: nts =>
-    nArr nt0 (mknArr nt nts)
-  end.
-
-Fixpoint mknArrRev (nts: list nterm) (nt0: nterm) :=
-  match nts with
-  | [] => nt0
-  | nt :: nts => nArr nt (mknArrRev nts nt0)
-  end.
+From MetaCoq.Template Require Import Ast.
+From ASUB Require Import GenM AssocList DeBruijnMap TemplateMonadUtils Utils Nterm.
 
 Import GenM.Notations GenM.
 
@@ -54,7 +26,7 @@ Definition get_inductive (s: string) : GenM.t inductive :=
              | _ => error "wrong kind of term"
              end
   end.
-    
+
 Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
   match t with
   | nRef s =>
@@ -68,11 +40,7 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
            | None => error (append "Unknown Identifier during Gallina Translation: " s)
            end
         end);;
-    implicitNum <- get_implicits s;;
-    match implicitNum with
-    | O => pure x
-    | S _ => pure (tApp x (list_fill hole implicitNum))
-    end
+    pure x
   | nHole => pure hole
   | nTerm t => pure t
   | nProd s nt0 nt1 =>
@@ -99,7 +67,15 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
   | nApp nt nts =>
     t <- translate' dbmap nt;;
     ts <- a_map (translate' dbmap) nts;;
-    pure (tApp t ts)
+    match nt with
+    | nRef s =>
+      implicitNum <- get_implicits s;;
+      match implicitNum with
+      | O => pure (tApp t ts)
+      | S _ => pure (tApp t (List.app (list_fill hole implicitNum) ts))
+      end
+    | _ => pure (tApp t ts)
+    end
   | nFix mfixs n =>
     fixNames <- a_map get_fix_name mfixs;;
     let dbmap' := DB.adds fixNames dbmap in
@@ -119,6 +95,10 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
                       nbranches;;
     ind <- get_inductive indName;;
     pure (tCase (ind, paramNum, Relevant) telimPred tdiscr tbranches)
+  | nCast ns nt =>
+    s <- translate' dbmap ns;;
+    t <- translate' DB.empty nt;;
+    pure (tCast s Cast t)
   end.
 
 (* TODO merge left-nested applications

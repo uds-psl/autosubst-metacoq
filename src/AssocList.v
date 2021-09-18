@@ -122,6 +122,15 @@ Module FMap (X: Discrete).
       else (k', v') :: (add s' k v)
     end.
 
+  Fixpoint addCollect {elt: Type} (s: t (list elt)) (k: key) (v: elt) : t (list elt) :=
+    match s with
+    | [] => [(k, [v])]
+    | (k', vs) :: s' =>
+      if X.eqb k k'
+      then (k, List.app vs [v]) :: s'
+      else (k', vs) :: (addCollect s' k v)
+    end.
+
   Fixpoint union {elt: Type} (s0 s1: t elt) : t elt :=
     match s0 with
     | [] => s1
@@ -170,6 +179,12 @@ Module FMap (X: Discrete).
     match A with
     | [] => []
     | (k, v) :: A' => add (fromList A') k v
+    end.
+
+  Fixpoint fromListCollect {elt : Type} (A: list (key * elt)) : t (list elt) :=
+    match A with
+    | [] => []
+    | (k, v) :: A' => addCollect (fromListCollect A') k v
     end.
   
 End FMap. 
@@ -229,6 +244,15 @@ Module FSet (X: Discrete).
     | [] => s1
     | v :: s0' =>
       union s0' (add s1 v)
+    end.
+
+  Fixpoint filter (s: t) (f : elt -> bool) : t :=
+    match s with
+    | [] => []
+    | v :: s' =>
+      if f v
+      then v :: (filter s' f)
+      else filter s' f
     end.
 
   (* Lemma intersection (s0 s1: t) : t. *)

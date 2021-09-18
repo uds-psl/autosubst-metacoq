@@ -51,11 +51,13 @@ Definition renaming_analysis (spec: Spec) (g_trans: G.t) (components: list (NELi
                                 else ren0)
                              components renamings in
   (* then go through all sorts and add those that occur in sorts already in the set *)
-  G.fold g_trans (fun sort adj ren0 =>
-                    if SSet.mem ren0 sort 
-                    then SSet.union ren0 adj
-                    else ren0)
-         renamings.
+  let renamings := G.fold g_trans (fun sort adj ren0 =>
+                                     if SSet.mem ren0 sort 
+                                     then SSet.union ren0 adj
+                                     else ren0)
+                          renamings in
+  renamings.
+                   
 
 (** * The substitution vector of a sort consist of the open sorts that occur in it. *)
 Definition subordination (g: G.t) (canonical_order: list tId) (open_sorts: SSet.t) : tId -> list tId :=
@@ -67,15 +69,26 @@ Definition subordination (g: G.t) (canonical_order: list tId) (open_sorts: SSet.
 (** Calculate the strongly connected components *)
 (* TODO using a hack here to convert the non-empty list to a normal list temporarily
  * but it should be possible to implement the sorting if if I have a proof that the canonical_order list contains all sorts. (maybe even declare a finite string type indexed by this canonical_order) *)
-Definition topological_sort g (canonical_order: list tId) : list (NEList.t tId) :=
-  list_filter_map (fun component => NEList.from_list (list_intersection canonical_order (NEList.to_list component))) (G.scc_list g).
+(** We also filter out the non-definable sorts *)
+Definition topological_sort g (open_sorts : SSet.t) (spec: Spec) (canonical_order: list tId) : list (NEList.t tId) :=
+  list_filter_map (fun component =>
+                     let componentL := NEList.to_list component in
+                     let componentL := List.filter (fun sort =>
+                                                      orb (SSet.mem open_sorts sort)
+                                                          (match SFMap.find spec sort with
+                                                           | None => false
+                                                           | Some l => negb (list_empty l)
+                                                           end)
+                                                   ) componentL in
+                     let componentOrdered := list_intersection canonical_order componentL in
+                     NEList.from_list componentOrdered) (G.scc_list g).
 
 Definition build_signature (componentsO: option (list (NEList.t tId))) (canonical_order: list tId) (spec: Spec) : ErrorM.t Signature :=
   let g := build_graph spec in
   open_sorts <- binder_analysis spec (G.mem_edge (G.transitive_closure g false));;
   let substs := subordination (G.transitive_closure g true) canonical_order open_sorts in
   let subst_of := SFMap.mapi (fun sort _ => substs sort) spec in
-  let components := match componentsO with None => topological_sort g canonical_order | Some c => c end in
+  let components := match componentsO with None => topological_sort g open_sorts spec canonical_order | Some c => c end in
   let arguments := SFMap.mapi (fun sort _ => match G.succ g sort with None => [] | Some x => x end) spec in
   (* let arguments := SFMap.fromList (map (fun '(sort, _) => (sort, match G.succ g sort with None => [] | Some x => x end)) (SFMap.elements spec)) in *)
   let renamings := renaming_analysis spec (G.transitive_closure g false) components in
@@ -136,6 +149,12 @@ Module Ex2.
   Open Scope string.
 
   Compute g.
+
+  Definition open_sorts := (match run (binder_analysis spec (G.mem_edge (G.transitive_closure g false))) tt tt with
+                            | inl _ => SSet.empty
+                            | inr (_, _, x) => x
+                            end).
+  Compute open_sorts.
   Definition components : list (NEList.t tId) := [("form", []); ("term", [])].
   (* as expected this is the empty list *)
   Compute (renaming_analysis spec (G.transitive_closure (G.invert g) false) components).
