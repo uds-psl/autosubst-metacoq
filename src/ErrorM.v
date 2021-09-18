@@ -1,5 +1,6 @@
 Require Import String.
-Open Scope string.
+#[ local ]
+ Open Scope string.
 
 From ASUB Require Import Monad.
 

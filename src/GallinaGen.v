@@ -1,4 +1,7 @@
 Require Import String List.
+Import ListNotations.
+#[ local ]
+ Open Scope string.
 
 From MetaCoq.Template Require Import All.
 From ASUB Require Import GenM AssocList DeBruijnMap Language TemplateMonadUtils Utils.

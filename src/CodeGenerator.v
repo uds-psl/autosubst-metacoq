@@ -2,7 +2,7 @@ Require Import List String.
 Import ListNotations.
 
 #[ local ]
-Open Scope string.
+ Open Scope string.
 
 From MetaCoq.Template Require Import All.
 Import MonadNotation.

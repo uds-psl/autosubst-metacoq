@@ -1,6 +1,7 @@
 Require Import String List.
 Import ListNotations.
-Open Scope string.
+#[ local ]
+ Open Scope string.
 
 From MetaCoq.Template Require Import All.
 Import MonadNotation.

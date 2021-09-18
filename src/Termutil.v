@@ -1,6 +1,7 @@
 Require Import String Arith List.
 Import ListNotations.
-Open Scope string.
+#[ local ]
+ Open Scope string.
 
 From MetaCoq.Template Require Import Ast.
 From ASUB Require Import Language Utils Quotes GallinaGen SubstTy Names GenM DeBruijnMap AssocList.

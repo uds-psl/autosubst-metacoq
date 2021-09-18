@@ -103,7 +103,8 @@ End Digraph.
 
 Module Ex.
   Module G := Digraph.
-  Open Scope string.
+  #[ local ]
+   Open Scope string.
 
   Definition g0 := G.add_edge G.empty "a" "b".
   Definition g := G.add_edge

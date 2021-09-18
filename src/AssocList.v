@@ -1,7 +1,7 @@
 Require Import List String.
 Import ListNotations.
 #[ local ]
-Open Scope string.
+ Open Scope string.
 
 Require Import Arith.
 From ASUB Require Import Utils.

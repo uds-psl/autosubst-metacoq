@@ -1,6 +1,7 @@
 Require Import List String.
 Import ListNotations.
-Open Scope string.
+#[ local ]
+ Open Scope string.
 
 From ASUB Require Import Language Graph AssocList Monad Utils ErrorM.
 From ASUB Require NEList.
