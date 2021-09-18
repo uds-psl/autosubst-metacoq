@@ -13,14 +13,6 @@ Definition initial_state (implicits: SFMap.t nat) := {| st_names := []; st_impli
 
 Definition initial_env := SFMap.fromList [("nat", nat_q); ("option", option_q); ("S", S_q)].
 
-Definition update_env (env env' : SFMap.t term) : SFMap.t term :=
-  SFMap.union env env'.
-
-Definition tm_update_env (names: list string) (env: SFMap.t term) : TemplateMonad (SFMap.t term) :=
-  env_list' <- tm_mapM locate_name names;;
-  let env' := SFMap.fromList env_list' in
-  tmReturn (update_env env' env). 
-
 
 Inductive scope_type := Unscoped | Wellscoped.
 Definition is_wellscoped (s: scope_type) :=
