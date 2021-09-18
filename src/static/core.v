@@ -89,3 +89,80 @@ Ltac minimize :=
          | [|- context[fun x => ?f x]] => change (fun x => f x) with f (* eta reduction *)
          | [|- context[fun x => ?g (?f x)]] => change (fun x => g (f x)) with (funcomp g f) (* funcomp folding *)
          end.
+
+(* had to add this tactic abbreviation because I could not print a setoid_rewrite with the arrow *)
+Ltac setoid_rewrite_left t := setoid_rewrite <- t.
+
+Ltac check_no_evars :=
+  match goal with
+  | [|- ?x] => assert_fails (has_evar x)
+  end.
+
+Require Import Setoid Morphisms.
+
+Lemma pointwise_forall {X Y:Type} (f g: X -> Y) :
+  (pointwise_relation _ eq f g) -> forall x, f x = g x.
+Proof.
+  trivial.
+Qed.
+
+Instance funcomp_morphism {X Y Z} :
+  Proper (@pointwise_relation Y Z eq ==> @pointwise_relation X Y eq ==> @pointwise_relation X Z eq) funcomp.
+Proof.
+  cbv - [funcomp].
+  intros g0 g1 Hg f0 f1 Hf x.
+  unfold funcomp. rewrite Hf, Hg.
+  reflexivity.
+Qed.
+
+Instance funcomp_morphism2 {X Y Z} :
+  Proper (@pointwise_relation Y Z eq ==> @pointwise_relation X Y eq ==> eq ==> eq) funcomp.
+Proof.
+  intros g0 g1 Hg f0 f1 Hf ? x ->.
+  unfold funcomp. rewrite Hf, Hg.
+  reflexivity.
+Qed.
+
+Ltac unfold_funcomp := match goal with
+                           | |-  context[(funcomp ?f ?g) ?s] => change ((funcomp f g) s) with (f (g s))
+                           end.
+
+Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Program.Tactics.
+Tactic Notation "autosubst_nointr" tactic(t) :=
+  let m := fresh "marker" in
+  pose (m := tt);
+  t; revert_until m; clear m.
+
+Ltac fext := autosubst_nointr repeat (
+  match goal with
+    [ |- ?x = ?y ] =>
+    (refine (@functional_extensionality_dep _ _ _ _ _) ||
+     refine (@forall_extensionality _ _ _ _) ||
+     refine (@forall_extensionalityP _ _ _ _) ||
+     refine (@forall_extensionalityS _ _ _ _)); intro
+  end).
+
+(* TODO added here but need the _axioms library *)
+Definition cod X A:  Type :=  X -> A.
+
+Definition cod_map {X} {A B} (f : A -> B) (p : X -> A) :
+  X -> B.
+Proof.
+  intros x. exact (f (p x)).
+Defined.
+
+(** Note that this requires functional extensionality. *)
+Definition cod_id {X} {A} {f : A -> A} :
+  (forall x, f x = x) -> forall (p: X -> A), cod_map f p = p.
+Proof. intros H p. unfold cod_map.
+       fext.
+       congruence. Defined.
+
+Definition cod_ext {X} {A B} {f f' : A -> B} :
+  (forall x, f x = f' x) -> forall (p: X -> A), cod_map f p = cod_map f' p.
+Proof. intros H p. unfold cod_map. fext. congruence. Defined.
+
+Definition cod_comp {X} {A B C} {f : A -> B} {g : B -> C} {h} :
+  (forall x, (funcomp g f) x =  h x) -> forall (p: X -> _), cod_map g (cod_map f p) = cod_map h p.
+Proof. intros H p. unfold cod_map. fext. intros x. apply H. Defined.
