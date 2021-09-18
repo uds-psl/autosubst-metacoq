@@ -40,6 +40,8 @@ src/SigAnalyzer.v
 src/DeBruijnMap.v
 src/GallinaGen.v
 src/CodeGenerator.v
+src/CodeGenDispatch.v
+src/Autosubst.v
 
 # src/testimport.v
 
