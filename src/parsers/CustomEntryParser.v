@@ -1,9 +1,12 @@
 (** * Module to parse HOAS using custom entry notations *)
-From ASUB Require Import Language AssocList ErrorM SigAnalyzer Nterm Utils IdentParsing.
 Require Import List String.
 Import ListNotations.
 #[ local ]
  Open Scope string.
+
+From MetaCoq.Template Require Import All.
+From ASUB Require Import Language AssocList ErrorM SigAnalyzer Nterm Utils IdentParsing Termutil TemplateMonadUtils.
+Import TemplateMonadNotations.
 
 
 Module Syntax.
@@ -12,9 +15,12 @@ Module Syntax.
   Inductive SyntaxBinder :=
   | HSingle : tId -> SyntaxBinder
   | HBinderList : string -> tId -> SyntaxBinder.
+  Inductive SyntaxSexpr :=
+   | SAtom : string -> SyntaxSexpr
+   | SCons : SyntaxSexpr -> SyntaxSexpr -> SyntaxSexpr.
 
   Inductive SyntaxArgHead := HAtom : tId -> SyntaxArgHead
-                         | HFunApp : fId -> list nterm -> list SyntaxArgHead -> SyntaxArgHead.
+                         | HFunApp : AutosubstFunctor -> list SyntaxSexpr -> list SyntaxArgHead -> SyntaxArgHead.
   Record SyntaxPosition := { hpos_binders : list SyntaxBinder;
                            hpos_head : SyntaxArgHead }.
   Record SyntaxParameter := { hpar_name : string; hpar_sort : string }.
@@ -27,7 +33,7 @@ End Syntax.
 
 
 Module SyntaxNotation.
-  Export Syntax.
+  Import Syntax.
 
   Declare Custom Entry syntax_sorts.
   Declare Custom Entry syntax_ctors.
@@ -107,19 +113,17 @@ Module SyntaxNotation.
                           (in custom syntax_head at level 2, only parsing).
   Notation "a" := (HAtom a)
                     (in custom syntax_head at level 1, a custom syntax_ident at level 1, only parsing).
-  Notation " 'cod' arg ( head0 , .. , head1 ) " :=
-    (HFunApp "cod" (cons arg nil) (@cons SyntaxArgHead head0 .. (@cons SyntaxArgHead head1 nil) ..))
+  Notation " 'codF' arg ( head0 , .. , head1 ) " :=
+    (HFunApp AFCod (cons arg nil) (@cons SyntaxArgHead head0 .. (@cons SyntaxArgHead head1 nil) ..))
       (in custom syntax_head at level 70, arg custom syntax_sexpr at level 2, head0 custom syntax_head at level 70, head1 custom syntax_head at level 70, no associativity, only parsing).
-  Notation " 'list' ( head0 , .. , head1 ) " :=
-    (HFunApp "list" nil (@cons SyntaxArgHead head0 .. (@cons SyntaxArgHead head1 nil) ..))
+  Notation " 'listF' ( head0 , .. , head1 ) " :=
+    (HFunApp AFList nil (@cons SyntaxArgHead head0 .. (@cons SyntaxArgHead head1 nil) ..))
       (in custom syntax_head at level 70, head0 custom syntax_head at level 70, head1 custom syntax_head at level 70, no associativity, only parsing).
 
-
   (*** Sexpr *)
-  Definition nApp1 s t := nApp s (cons t nil).
-  Notation "x" := (nRef x)
+  Notation "x" := (SAtom x)
                     (in custom syntax_sexpr at level 1, x custom syntax_ident at level 1, only parsing).
-  Notation " a b " := (nApp1 a b)
+  Notation " a b " := (SCons a b)
                         (in custom syntax_sexpr at level 3, left associativity, only parsing).
   Notation " ( a ) " := (a)
                           (in custom syntax_sexpr at level 2, only parsing).
@@ -127,67 +131,106 @@ End SyntaxNotation.
 
 Module SyntaxTranslation.
   (*** Translation *)
-  Import ErrorM.Notations ErrorM.
-  Export Syntax.
+  Import Syntax.
 
   Definition translate_binder (hb: SyntaxBinder) : Binder :=
     match hb with
     | HSingle x => Single x
-    (* TODO add variadic binders *)
-    | HBinderList p x => Single x
+    | HBinderList p x => BinderList p x
     end.
 
-  Fixpoint translate_head (head: SyntaxArgHead) : ArgumentHead :=
+  (** * Try to get a reference to the given string.
+   ** If it's not in the environment we just take it as a reference that will be
+   ** connected to the environment later during the nterm -> term translation.
+   ** 
+   ** This happens for example if one references a parameter in a sexpr.
+   ** e.g. from fol "Func (p : nat) : codF (fin p) (term) -> term"
+   ** the fin can be turned into a ConstRef but p is not in the environment.
+   *)
+  Definition locate_name2 (name: string) : TemplateMonadSet nterm :=
+    locs <- tmLocate name;;
+    match locs with
+    | [IndRef ind] => tmReturn (nTerm (tInd ind []))
+    | [ConstructRef ind n] => tmReturn (nTerm (tConstruct ind n []))
+    | [ConstRef kn] => tmReturn (nTerm (tConst kn []))
+    | _ => tmReturn (nRef name)
+    end.
+
+  (** * Translate an S-expression
+   ** the arguments to a functor can be arbitrary Coq terms so here we quote them
+   *)
+  Fixpoint translate_sexpr (sexpr: SyntaxSexpr) : TemplateMonadSet nterm :=
+    match sexpr with
+    | SAtom x => locate_name2 x
+    | SCons x y =>
+      x <- translate_sexpr x;;
+      y <- translate_sexpr y;;
+      tmReturn (nApp x [y])
+    end.
+  
+  Fixpoint translate_head (head: SyntaxArgHead) : TemplateMonadSet ArgumentHead :=
     match head with
-    | HAtom x => Atom x
-    | HFunApp f staticArgs heads => FunApp f staticArgs (map translate_head heads)
+    | HAtom x => tmReturn (Atom x)
+    | HFunApp f staticArgs heads =>
+      staticArgs <- tm_mapM translate_sexpr staticArgs;;
+      heads <- tm_mapM2 translate_head heads;;
+      tmReturn (FunApp f staticArgs heads)
     end.
 
-  Definition translate_position (hp: SyntaxPosition) : Position :=
-    {| pos_binders := map translate_binder hp.(hpos_binders);
-       pos_head := translate_head hp.(hpos_head) |}.
+  Definition translate_position (hp: SyntaxPosition) : TemplateMonadSet Position :=
+    head <- translate_head hp.(hpos_head);;
+    tmReturn {| pos_binders := List.map translate_binder hp.(hpos_binders);
+                pos_head := head |}.
 
-  Definition translate_target (hp: SyntaxPosition) : ErrorM.t tId :=
+  Definition translate_target (hp: SyntaxPosition) : TemplateMonadSet tId :=
     match hp with
-    | {| hpos_binders := []; hpos_head := HAtom head |} =>
-      pure head
-    | _ => error "wrong target"
+    | {| hpos_binders := []; hpos_head := HAtom head |} => tmReturn head
+    | _ => tmFail "wrong target"
     end.
 
-  Definition translate_arguments (hpositions: list SyntaxPosition) : ErrorM.t (tId * list Position) :=
+  (** * Translate a list of syntax positions into the internal positions plus the target
+   ** * We have to reverse the positions here because we parse them reversed so that the target is the head *)
+  Definition translate_arguments (hpositions: list SyntaxPosition) : TemplateMonadSet (tId * list Position) :=
     match hpositions with
-    | [] => error "empty"
+    | [] => tmFail "translate_arguments: empty position list"
     | htarget :: hpositions =>
       target <- translate_target htarget;;
-      pure (target, map translate_position hpositions)
+      positions <- tm_mapM translate_position hpositions;;
+      tmReturn (target, List.rev positions)
     end.
            
-  Definition translate_parameter (hp: SyntaxParameter) : string * tId :=
-    (hp.(hpar_name), hp.(hpar_sort)).
+  Definition translate_parameter (hp: SyntaxParameter) : gallinaArg :=
+    explArg hp.(hpar_name) (nRef hp.(hpar_sort)).
 
-  Definition translate_constructor (hc: SyntaxConstructor) : ErrorM.t (tId * Constructor)  :=
+  Definition translate_constructor (hc: SyntaxConstructor) : TemplateMonadSet (tId * Constructor)  :=
     '(target, positions) <- translate_arguments hc.(hcon_positions);;
-    let c := {| con_parameters := map translate_parameter hc.(hcon_parameters);
+    let parameters := List.map translate_parameter hc.(hcon_parameters) in
+    let c := {| con_parameters := parameters;
                 con_name := hc.(hcon_name);
                 con_positions := positions |} in
-    pure (target, c).
+    tmReturn (target, c).
 
 
-  Definition translate_spec (sorts: list tId) (hctors: list SyntaxConstructor) : ErrorM.t Spec :=
-    ctors <- sequence (map translate_constructor hctors);;
+  Definition translate_spec (sorts: list tId) (hctors: list SyntaxConstructor) : TemplateMonadSet Spec :=
+    ctors <- tm_mapM translate_constructor hctors;;
     (* TODO fail if there is a constructor that does not in the declared sorts *)
     let spec_empty := SFMap.fromList (List.map (fun s => (s, [])) sorts) in
     let cs_by_sorts := List.fold_left (fun spec '(sort, ctor) =>
                                          SFMap.addCollect spec sort ctor)
                                       ctors spec_empty in
-    pure (cs_by_sorts).
+    tmReturn (cs_by_sorts).
 
-  Definition translate_signature (lang: autosubstLanguage) : ErrorM.t Signature :=
+  Definition translate_signature (lang: autosubstLanguage) : TemplateMonadSet Signature :=
     let sorts := List.map hsort_name lang.(al_sorts) in
     (* TODO extract var ctor names *)
     spec <- translate_spec sorts lang.(al_ctors);;
     let canonical_order := sorts in
-    build_signature None canonical_order spec.
+    match ErrorM.run (build_signature None canonical_order spec) tt tt with
+    | inl e => tmFail e
+    | inr (_, _, sig) =>
+      sig <- tmEval all sig;;
+      tmReturn sig
+    end.
 End SyntaxTranslation.
 
 Module SyntaxExample.
@@ -197,8 +240,8 @@ Module SyntaxExample.
   Check {{ app : (bind tm in tm) -> tm }}.
   Check {{ bla : (bind tm in tm) -> tm }}.
   Check {{ bla (p: nat) : tm -> tm }}.
-  Check {{ bla (p: nat) : cod (fin p) (tm, tm) -> tm }}.
-  Check {{ bla (p: nat) : tm -> list (tm, tm) -> tm }}.
+  Check {{ bla (p: nat) : codF (fin p) (tm, tm) -> tm }}.
+  Check {{ bla (p: nat) : tm -> listF (tm, tm) -> tm }}.
 
   Definition bla_sorts := <{ ty : Type;
                              tm : Type }>.
@@ -231,5 +274,27 @@ Module SyntaxExample.
   
   (* Compute translate_spec fcbv_sorts fcbv_constrs. *)
   Definition lang := {| al_sorts := fcbv_sorts; al_ctors := fcbv_constrs |}.
-  Compute ErrorM.run (translate_signature lang) tt tt.
+  MetaCoq Run (translate_signature lang >>= tmPrint).
+
+Definition fol : autosubstLanguage :=
+  {| al_sorts := <{ term : Type;
+                    form : Type }>;
+     al_ctors := {{ Func (f : nat) : codF (fin f) (term) -> term;
+                    Fal : form;
+                    Pred (p : nat) : codF (fin p) (term) -> form;
+                    Impl : form -> form -> form;
+                    Conj : form -> form -> form;
+                    Disj : form -> form -> form;
+                    All : (bind term in form) -> form;
+                    Ex : (bind term in form) -> form }} |}.
+
+  MetaCoq Run (translate_signature fol >>= tmPrint).
+
+  
+Definition variadic : autosubstLanguage :=
+  {| al_sorts := <{ tm : Type  }>;
+     al_ctors := {{ app : tm -> listF (tm) -> tm;
+                    lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}.
+
+MetaCoq Run (translate_signature variadic >>= tmPrint).
 End SyntaxExample.
