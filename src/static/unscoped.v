@@ -10,12 +10,6 @@ Version: December 11, 2019.
 From ASUB Require Import core.
 Require Import Setoid Morphisms Relation_Definitions.
 
-Definition ap {X Y} (f : X -> Y) {x y : X} (p : x = y) : f x = f y :=
-  match p with eq_refl => eq_refl end.
-
-Definition apc {X Y} {f g : X -> Y} {x y : X} (p : f = g) (q : x = y) : f x = g y :=
-  match q with eq_refl => match p with eq_refl => eq_refl end end.
-
 (** ** Primitives of the Sigma Calculus. *)
 
 Definition shift  := S.

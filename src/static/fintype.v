@@ -6,14 +6,9 @@ Version: December 11, 2019.
 From ASUB Require Import core.
 Require Import Setoid Morphisms Relation_Definitions.
 
+(* TODO remove to make more predictable *)
 Set Implicit Arguments.
 Unset Strict Implicit.
-
-Definition ap {X Y} (f : X -> Y) {x y : X} (p : x = y) : f x = f y :=
-  match p with eq_refl => eq_refl end.
-
-Definition apc {X Y} {f g : X -> Y} {x y : X} (p : f = g) (q : x = y) : f x = g y :=
-  match q with eq_refl => match p with eq_refl => eq_refl end end.
 
 (** ** Primitives of the Sigma Calculus
     We implement the finite type with _n_ elements, _I^n_, as the _n_-fold iteration of the Option Type. _I^0_ is implemented as the empty type.

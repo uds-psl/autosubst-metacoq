@@ -9,6 +9,9 @@ Proof.
   reflexivity.
 Qed.
 
+Definition ap {X Y} (f : X -> Y) {x y : X} (p : x = y) : f x = f y :=
+  match p with eq_refl => eq_refl end.
+
 
 (** ** Functor Instances
 
@@ -21,7 +24,7 @@ Two things are important:
 (** *** List Instance *)
 Require Import List.
 
-Notation "'list_map'" := map.
+Definition list_map {A B: Type} (f: A -> B) (l: list A) := @List.map A B f l.
 
 Definition list_ext {A B} {f g : A -> B} :
   (forall x, f x = g x) -> forall xs, list_map f xs = list_map g xs.
@@ -32,6 +35,7 @@ Defined.
 Definition list_id {A}  { f : A -> A} :
   (forall x, f x = x) -> forall xs, list_map f xs = xs.
 Proof.
+  unfold list_map.
   intros H. induction xs. reflexivity.
   cbn. rewrite H. rewrite IHxs; eauto.
 Defined.
@@ -39,6 +43,7 @@ Defined.
 Definition list_comp {A B C} {f: A -> B} {g: B -> C} {h} :
   (forall x, (funcomp  g f) x = h x) -> forall xs, map g (map f xs) = map h xs.
 Proof.
+  unfold list_map.
   induction xs. reflexivity.
   cbn. rewrite <- H. f_equal. apply IHxs.
 Defined.
