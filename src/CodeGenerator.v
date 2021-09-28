@@ -11,10 +11,6 @@ Import TemplateMonadNotations.
 
 (* Import GenUpsExample_fcbv. *)
 
-Record genInfo := { in_env : SFMap.t term;
-                    in_implicits : SFMap.t nat;
-                    in_flags : Flags;
-                    in_sig : Signature }.
 
 (* Module stlc. *)
 (*   From ASUB Require Import CustomEntryParser. *)

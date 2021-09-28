@@ -4,14 +4,20 @@ Import ListNotations.
  Open Scope string.
 
 From MetaCoq.Template Require Import All.
-From ASUB Require Import Monad Language AssocList Utils TemplateMonadUtils Quotes Flags.
+From ASUB Require Import Monad Language AssocList Utils Quotes Flags.
 
-Record State := { st_names : list string; st_implicits : SFMap.t nat }.
+Record State := { st_names : list string; st_implicits : SFMap.t (list bool) }.
 
 Definition empty_state := {| st_names := []; st_implicits := SFMap.empty |}.
-Definition initial_state (implicits: SFMap.t nat) := {| st_names := []; st_implicits := implicits |}.
+Definition initial_state (implicits: SFMap.t (list bool)) := {| st_names := []; st_implicits := implicits |}.
 
 Definition initial_env := SFMap.fromList [("nat", nat_q); ("option", option_q); ("S", S_q)].
+
+(** * Record of information that is carried by the TemplateMonad in between evaluations of the GenM monad. *)
+Record genInfo := { in_env : SFMap.t term;
+                    in_implicits : SFMap.t (list bool);
+                    in_flags : Flags;
+                    in_sig : Signature }.
 
 
 Record R' := { R_flags : Flags; R_sig: Signature; R_env : SFMap.t term }.
@@ -34,6 +40,12 @@ Module GenM.
 
   Import Notations.
 
+  Definition runInfo {A: Type} (m: t A) (info: genInfo) :=
+    run m {| R_flags := info.(in_flags);
+             R_sig := info.(in_sig);
+             R_env := info.(in_env) |}
+        (initial_state info.(in_implicits)).
+
   Definition register_name (name: string) : t unit :=
     state <- get;;
     put {| st_names := name :: state.(st_names); st_implicits := state.(st_implicits) |}.
@@ -42,15 +54,15 @@ Module GenM.
     state <- get;;
     put {| st_names := app names' state.(st_names); st_implicits := state.(st_implicits) |}.
 
-  Definition register_implicits (name: string) (implicit_num: nat) : t unit :=
+  Definition register_implicits (name: string) (implicits: list bool) : t unit :=
     state <- get;;
-    put {| st_names := state.(st_names); st_implicits := SFMap.add state.(st_implicits) name implicit_num |}.
+    put {| st_names := state.(st_names); st_implicits := SFMap.add state.(st_implicits) name implicits |}.
 
-  Definition get_implicits (name: string) : t nat :=
+  Definition get_implicits (name: string) : t (list bool) :=
     state <- get;;
     match SFMap.find state.(st_implicits) name with
-    | None => pure 0
-    | Some n => pure n
+    | None => pure []
+    | Some l => pure l
     end.
   
   (* Definition env_get (s: string) : t term := *)

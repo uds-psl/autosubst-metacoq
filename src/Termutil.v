@@ -58,9 +58,8 @@ Definition implArg (name: string) (type: nterm) := {| g_name := name; g_implicit
 Definition explArg (name: string) (type: nterm) := {| g_name := name; g_implicit := false; g_type := type |}.
 
 Definition process_implicits (name: string) (args: list gallinaArg) : t unit :=
-  let implicitNum := List.length (list_filter_map (fun '{| g_implicit := implicit |} =>
-                                 if implicit then Some tt else None) args) in
-  register_implicits name implicitNum.
+  let implicits := List.map g_implicit args in
+  register_implicits name implicits.
 
 Definition add_binders (args: list gallinaArg) (innerProof: nterm) : nterm :=
   List.fold_right (fun '{| g_name := name; g_type := argType |} proof => nLambda name argType proof)

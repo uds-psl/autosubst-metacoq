@@ -27,6 +27,22 @@ Definition get_inductive (s: string) : GenM.t inductive :=
              end
   end.
 
+Fixpoint zipImplicits (implicits: list bool) (ts: list term) : GenM.t (list term) :=
+  match implicits with
+  | [] => pure ts
+  | i :: implicits =>
+    if i
+    then
+     res <- zipImplicits implicits ts;;
+     pure (hole :: res)
+    else match ts with
+         | [] => pure []
+         | t :: ts =>
+           res <- zipImplicits implicits ts;;
+           pure (t :: res)
+         end
+  end.
+
 Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
   match t with
   | nRef s =>
@@ -67,13 +83,12 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
   | nApp nt nts =>
     t <- translate' dbmap nt;;
     ts <- a_map (translate' dbmap) nts;;
+    (* have to translate ts beforehand and call zipImplicits with ts because of guard checker *)
     match nt with
     | nRef s =>
-      implicitNum <- get_implicits s;;
-      match implicitNum with
-      | O => pure (tApp t ts)
-      | S _ => pure (tApp t (List.app (list_fill hole implicitNum) ts))
-      end
+      implicits <- get_implicits s;;
+      tsImplicits <- zipImplicits implicits ts;;
+      pure (tApp t tsImplicits)
     | _ => pure (tApp t ts)
     end
   | nFix mfixs n =>
