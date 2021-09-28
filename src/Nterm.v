@@ -10,7 +10,6 @@ Inductive nterm : Type :=
 | nRef : string -> nterm (* turns into tRel, tConst, tInd, tConstruct from the normal term type *)
 | nHole : nterm
 | nTerm : term -> nterm
-| nCast : nterm -> nterm -> nterm
 | nProd : string -> nterm -> nterm -> nterm
 | nArr : nterm -> nterm -> nterm
 | nLambda : string -> nterm -> nterm -> nterm

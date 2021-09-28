@@ -95,10 +95,6 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
                       nbranches;;
     ind <- get_inductive indName;;
     pure (tCase (ind, paramNum, Relevant) telimPred tdiscr tbranches)
-  | nCast ns nt =>
-    s <- translate' dbmap ns;;
-    t <- translate' DB.empty nt;;
-    pure (tCast s Cast t)
   end.
 
 (* TODO merge left-nested applications
