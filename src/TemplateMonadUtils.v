@@ -2,9 +2,12 @@ Require Import List String.
 Import ListNotations.
 
 From MetaCoq.Template Require Import All Pretty.
-From ASUB Require Import AssocList.
+From ASUB Require Import AssocList GenM.
 Import MonadNotation.
 
+(** * Shorthand for the TemplateMonad with fixed universe argument *)
+Definition TemplateMonadSet := TemplateMonad@{_ Set}.
+  
 Module TemplateMonadNotations.
   Declare Scope tm_scope.
 
@@ -26,9 +29,8 @@ Module TemplateMonadNotations.
 End TemplateMonadNotations.
 Import TemplateMonadNotations.
 
-(* TODO some of these functions should already be in monad_utils.v of the TemplateMonad library *)
 (** * Evaluate monadic actions in sequence and collect results. *)
-Fixpoint tm_sequence {A: Type} (mvals: list (TemplateMonad A)) : TemplateMonad@{_ Set} (list A) :=
+Fixpoint tm_sequence {A: Type} (mvals: list (TemplateMonadSet A)) : TemplateMonadSet (list A) :=
   match mvals with
   | [] => tmReturn []
   | mval :: mvals =>
@@ -37,28 +39,47 @@ Fixpoint tm_sequence {A: Type} (mvals: list (TemplateMonad A)) : TemplateMonad@{
     tmReturn (val :: vals)
   end.
 
-(** * Map a monadic action over a list. *)
-Fixpoint tm_mapM {A B: Type} (f: A -> TemplateMonad B) (l: list A) : TemplateMonad@{_ Set} (list B) :=
-  match l with
-  | [] => tmReturn []
-  | a :: l =>
-    b <- f a;;
-    bs <- tm_mapM f l;;
-    tmReturn (b :: bs)
-  end.
+(*   (* TODO find out why guard checker does not like the this tm_mapM *)
+(*    does not accept src/parsers/CustomEntryParser.v::translate_head *) *)
+(* (** * Map a monadic action over a list. *) *)
+(* Fixpoint tm_mapM {A B: Type} (f: A -> TemplateMonadSet B) (l: list A) : TemplateMonadSet (list B) := *)
+(*   match l with *)
+(*   | [] => tmReturn [] *)
+(*   | a :: l => *)
+(*     b <- f a;; *)
+(*     bs <- tm_mapM f l;; *)
+(*     tmReturn (b :: bs) *)
+(*   end. *)
 
-(** * Left-fold a monadic action over a list. *)
-Fixpoint tm_foldM {A B: Type} (f: A -> B -> TemplateMonad A) (l: list B) (init: A) : TemplateMonad@{_ Set} A :=
-  match l with
-  | [] => tmReturn init
-  | b :: l =>
-    init <- f init b;;
-    tm_foldM f l init
+(* Section MonadMap. *)
+(*   Context {A B} (f : A -> TemplateMonadSet B). *)
+(* (** * Map a monadic action over a list. *) *)
+(*   Fixpoint tm_mapM2 (l: list A) : TemplateMonadSet (list B) := *)
+(*     match l with *)
+(*     | [] => tmReturn [] *)
+(*     | a :: l => *)
+(*       b <- f a;; *)
+(*       bs <- tm_mapM2 l;; *)
+(*       tmReturn (b :: bs) *)
+(*     end. *)
+(* End MonadMap. *)
+
+
+(** * Lift a GenM computation into the TemplateMonad *)
+Definition tm_liftGenM {A} (m: GenM.t A) (info: genInfo) : TemplateMonadSet A :=
+  match GenM.run m {| R_flags := info.(in_flags);
+                      R_sig := info.(in_sig);
+                      R_env := info.(in_env) |}
+                 (initial_state info.(in_implicits)) with
+  | inl e => tmFail e
+  | inr (_, _, x) =>
+    x_eval <- tmEval all x;;
+    tmReturn x_eval
   end.
 
 (** * Register a definition in the Coq environment given the quoted representation of its type and term.
  ** * This works with terms that contain holes (but the types must not, else Coq cannot infer all holes) *)
-Definition tmTypedDefinition (lem: string * term * term) : TemplateMonad@{_ Set} unit :=
+Definition tmTypedDefinition (lem: string * term * term) : TemplateMonadSet unit :=
   let '(name, typ_q, t_q) := lem in
   typ <- tmUnquoteTyped Type typ_q;;
   (* TODO tried casting here but it still cannot infer some arguments *)
@@ -71,7 +92,7 @@ Definition tmTypedDefinition (lem: string * term * term) : TemplateMonad@{_ Set}
 
 (** * Get a reference to an inductive type, constructor or defined constant.
  ** * Used to update the translation environment in our code generation functions. *)
-Definition locate_name (name: string) : TemplateMonad@{_ Set} (string * term) :=
+Definition locate_name (name: string) : TemplateMonadSet (string * term) :=
   loc <- tmLocate1 name;;
   match loc with
   | IndRef ind => tmReturn (name, tInd ind [])
@@ -80,23 +101,9 @@ Definition locate_name (name: string) : TemplateMonad@{_ Set} (string * term) :=
   | _ => tmFail (String.append "unknown name or name is not an inductive/constructor/constant: " name)
   end.
 
-(* TODO find out how to construct reference so that I don't have to take the detour through TemplateMonad *)
-(* Inductive bla := foo : bla. *)
-(* (* module name + inductive name + inductive index *) *)
-(* MetaCoq Run (locate_name "bla" >>= tmPrint). *)
-(* (* module name + inductive name + inductive index + ctor index *) *)
-(* MetaCoq Run (locate_name "foo" >>= tmPrint). *)
-(* Lemma ta : True. *)
-(* Proof. *)
-(*   exact I. *)
-(* Qed. *)
-
-(* (* module name + lemma name *) *)
-(* MetaCoq Run (locate_name "ta" >>= tmPrint). *)
-
 
 (** * Get information about an inductive type given its name. *)
-Definition locate_mind (name: string) : TemplateMonad@{_ Set} mutual_inductive_entry :=
+Definition locate_mind (name: string) : TemplateMonadSet mutual_inductive_entry :=
   loc <- tmLocate1 name;;
   match loc with
   | IndRef ind =>
@@ -109,14 +116,11 @@ Definition locate_mind (name: string) : TemplateMonad@{_ Set} mutual_inductive_e
 (* kind of works but it's not completely evaluated *)
 (** * Print a term using MetaCoq's printing functionality.
  ** * Might be used to serialize our generated code. *)
-Definition my_print_term (t: term) : TemplateMonad@{_ Set} unit :=
+Definition my_print_term (t: term) : TemplateMonadSet unit :=
   let s := print_term ([], Monomorphic_ctx (LevelSet.Mkt [], ConstraintSet.Mkt [])) [] false t in
   tmEval TemplateMonad.Common.all s >>= tmPrint.
 
-Definition update_env (env env' : SFMap.t term) : SFMap.t term :=
-  SFMap.union env env'.
-
-Definition tm_update_env (names: list string) (env: SFMap.t term) : TemplateMonad@{_ Set} (SFMap.t term) :=
-  env_list' <- (tm_mapM locate_name names);;
+Definition tm_update_env (names: list string) (env: SFMap.t term) : TemplateMonadSet (SFMap.t term) :=
+  env_list' <- monad_map locate_name names;;
   let env' := SFMap.fromList env_list' in
   tmReturn (update_env env' env). 

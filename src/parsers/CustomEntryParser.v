@@ -172,8 +172,8 @@ Module SyntaxTranslation.
     match head with
     | HAtom x => tmReturn (Atom x)
     | HFunApp f staticArgs heads =>
-      staticArgs <- tm_mapM translate_sexpr staticArgs;;
-      heads <- tm_mapM2 translate_head heads;;
+      staticArgs <- monad_map translate_sexpr staticArgs;;
+      heads <- monad_map translate_head heads;;
       tmReturn (FunApp f staticArgs heads)
     end.
 
@@ -195,7 +195,7 @@ Module SyntaxTranslation.
     | [] => tmFail "translate_arguments: empty position list"
     | htarget :: hpositions =>
       target <- translate_target htarget;;
-      positions <- tm_mapM translate_position hpositions;;
+      positions <- monad_map translate_position hpositions;;
       tmReturn (target, List.rev positions)
     end.
            
@@ -212,7 +212,7 @@ Module SyntaxTranslation.
 
 
   Definition translate_spec (sorts: list tId) (hctors: list SyntaxConstructor) : TemplateMonadSet Spec :=
-    ctors <- tm_mapM translate_constructor hctors;;
+    ctors <- monad_map translate_constructor hctors;;
     (* TODO fail if there is a constructor that does not in the declared sorts *)
     let spec_empty := SFMap.fromList (List.map (fun s => (s, [])) sorts) in
     let cs_by_sorts := List.fold_left (fun spec '(sort, ctor) =>

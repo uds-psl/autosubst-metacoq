@@ -48,7 +48,9 @@ Definition substSubstName x := sep "substSubst" x.
 Definition upNameGen (name: string) (sort: tId) (binder: Binder) :=
   match binder with
   | Single sort' => sepd [name; sort'; sort]
+  | BinderList _ sort' => sepd [name; "list"; sort'; sort]
   end.
+
 Definition upRenName := upNameGen "upRen".
 Definition upName := upNameGen "up". 
 Definition upIdName := upNameGen "upId". 

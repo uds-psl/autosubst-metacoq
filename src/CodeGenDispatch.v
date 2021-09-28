@@ -12,28 +12,51 @@ From ASUB Require Import Language Utils CodeGenerator GenUps TemplateMonadUtils 
 Import TemplateMonadInterface.
 
 Definition genCode (sig : Signature) (flags : Flags): TemplateMonad unit :=
+  let info := {| in_env := initial_env;
+                 in_implicits := SFMap.empty;
+                 in_flags := flags;
+                 in_sig := sig |} in
   let components := sig.(sigComponents) in
   let substOfs := sig.(sigSubstOf) in
-  tm_foldM (fun '(doneUps, info) component =>
+  monad_fold_left (fun '(doneUps, info) component =>
               (* TODO pretty ugly since I can't use GenM bind here. Would have to buggle up the nlemma and nmutual_ind_entry from generate to do it here *)
               let hd_sort := NEList.hd component in
               let substSorts := SFMap.find substOfs hd_sort in
               match substSorts with
               | None => tmFail (String.append "unknown sort: " hd_sort)
               | Some substSorts =>
-                let '(newUps, ups) := getUps substSorts doneUps in
+                let '(newUps, ups) := getUps substSorts doneUps info.(in_flags).(fl_scope_type) in
                 ups <- tmEval (TemplateMonad.Common.all) ups;;
                 info <- generate component ups info;;
                 tmReturn (List.app doneUps newUps, info)
               end)
            components
-           ([], {| in_env := initial_env;
-                   in_implicits := SFMap.empty;
-                   in_flags := flags;
-                   in_sig := sig |});;
+           ([], info);;
   tmReturn tt.
 
-(* MetaCoq Run (genCode Hsig_example.mySig default_flags). *)
+Definition genCode2 (sig: Signature) (flags: Flags) (env: SFMap.t term): TemplateMonad unit :=
+  let info := {| in_env := env;
+                 in_implicits := SFMap.empty;
+                 in_flags := flags;
+                 in_sig := sig |} in
+  let components := sig.(sigComponents) in
+  let substOfs := sig.(sigSubstOf) in
+  monad_fold_left (fun '(doneUps, info) component =>
+              (* TODO pretty ugly since I can't use GenM bind here. Would have to buggle up the nlemma and nmutual_ind_entry from generate to do it here *)
+              let hd_sort := NEList.hd component in
+              let substSorts := SFMap.find substOfs hd_sort in
+              match substSorts with
+              | None => tmFail (String.append "unknown sort: " hd_sort)
+              | Some substSorts =>
+                let '(newUps, ups) := getUps substSorts doneUps info.(in_flags).(fl_scope_type) in
+                ups <- tmEval (TemplateMonad.Common.all) ups;;
+                info <- generate2 component ups info;;
+                tmReturn (List.app doneUps newUps, info)
+              end)
+           components
+           ([], info);;
+  tmReturn tt.
+
 
     
 

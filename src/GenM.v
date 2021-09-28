@@ -11,7 +11,11 @@ Record State := { st_names : list string; st_implicits : SFMap.t (list bool) }.
 Definition empty_state := {| st_names := []; st_implicits := SFMap.empty |}.
 Definition initial_state (implicits: SFMap.t (list bool)) := {| st_names := []; st_implicits := implicits |}.
 
+(** * Put constants for wellscoped syntax in the initial environment. *)
 Definition initial_env := SFMap.fromList [("nat", nat_q); ("option", option_q); ("S", S_q)].
+Definition update_env (env env' : SFMap.t term) : SFMap.t term :=
+  SFMap.union env env'.
+
 
 (** * Record of information that is carried by the TemplateMonad in between evaluations of the GenM monad. *)
 Record genInfo := { in_env : SFMap.t term;
@@ -84,7 +88,7 @@ Module GenM.
     spec <- asks (fun x => sigSpec x.(R_sig));;
     match SFMap.find spec sort with
     | Some cs => pure cs
-    | None => error ("constructors called with unknown sort")
+    | None => error (String.append "constructors called with unknown sort: " sort)
     end.
 
   (** get the arguments of a sort *)
@@ -92,7 +96,7 @@ Module GenM.
     args <- asks (fun x => sigArguments x.(R_sig));;
     match SFMap.find args sort with
     | Some sorts => pure sorts
-    | None => error ("getArguments called with unknown sort")
+    | None => error (String.append "getArguments called with unknown sort: " sort)
     end.
 
   (** check if a sort has renamings *)
@@ -105,7 +109,7 @@ Module GenM.
     substs <- asks (fun x => sigSubstOf x.(R_sig));;
     match SFMap.find substs sort with
     | Some sorts => pure sorts
-    | None => error ("substOf called with unknown sort")
+    | None => error (String.append "substOf called with unknown sort: " sort)
     end.
 
   (** check if a sort has a substitution vector *)

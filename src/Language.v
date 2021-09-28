@@ -1,7 +1,7 @@
 (* Here I define the spec like that holds all the data for the code we want to generate *)
 Require Import String List.
 Import ListNotations.
-From ASUB Require Import AssocList Utils NEList Nterm.
+From ASUB Require Import AssocList Utils NEList Nterm Quotes.
 From MetaCoq.Template Require Import All.
 
 Notation tId := string.
@@ -9,18 +9,35 @@ Notation vId := string.
 Notation fId := string.
 Notation cId := string.
 
+(** * A representation of arguments that resembles to one from the Coq implementation.
+ ** * When we build an application to some named constant, during translation to the
+ ** * MetaCoq AST we pass a number of holes corresponding to how many arguments were
+ ** * marked implicit in the call to `add_binders`
+
+ ** * DONE atm we always prepend these holes to the given argument list. This has the
+ ** * assumption that there are no implicit arguments after some non-implicit argument.
+ ** * To fix this we would have to merge left-nested applications during the translation
+ ** * and save the list of implicit positions instead of only their number.
+ *)
+Record gallinaArg := { g_name : string; g_implicit : bool; g_type : nterm }.
+Definition implArg (name: string) (type: nterm) := {| g_name := name; g_implicit := true; g_type := type |}.
+Definition explArg (name: string) (type: nterm) := {| g_name := name; g_implicit := false; g_type := type |}.
+Definition makeExplicitArg (g: gallinaArg) := {| g_name := g.(g_name); g_implicit := false; g_type := g.(g_type) |}.
+
+Inductive AutosubstFunctor : Set := AFCod | AFList.
+
 Inductive Binder :=
-| Single : tId -> Binder.
-(* | BinderList : string -> tId -> Binder. *)
+| Single : tId -> Binder
+| BinderList : string -> tId -> Binder.
 
 Inductive ArgumentHead :=
 | Atom : tId -> ArgumentHead
-| FunApp : fId -> list nterm -> list ArgumentHead -> ArgumentHead.
+| FunApp : AutosubstFunctor -> list nterm -> list ArgumentHead -> ArgumentHead.
   
 Definition getBinders b :=
   match b with
   | Single x => [x]
-  (* | BinderList _ x => [x] *)
+  | BinderList _ x => [x]
   end.
 
 Fixpoint getArgSorts (a: ArgumentHead) : list tId :=
@@ -31,7 +48,7 @@ Fixpoint getArgSorts (a: ArgumentHead) : list tId :=
 
 Record Position := { pos_binders : list Binder;
                      pos_head : ArgumentHead }.
-Record Constructor := { con_parameters : list (string * tId);
+Record Constructor := { con_parameters : list gallinaArg;
                         con_name : cId;
                         con_positions : list Position }.
 
@@ -149,9 +166,9 @@ Module Hsig_fol.
                                                  con_name := "Fal";
                                                  con_positions := []
                                                |}; {|
-                                               con_parameters := [("p","nat")];
+                                               con_parameters := [explArg "p" (nTerm nat_q)];
                                                con_name := "Pred";
-                                               con_positions := [ {| pos_binders := []; pos_head := FunApp "cod" [nApp (nRef "fin") [nRef "p"]] [ Atom "term" ] |} ]
+                                               con_positions := [ {| pos_binders := []; pos_head := FunApp AFCod [nApp (nRef "fin") [nRef "p"]] [ Atom "term" ] |} ]
                                                (* con_positions := [ {| pos_binders := []; pos_head := Atom "term" |}] *)
                                              |}; {|
                                                con_parameters := [];
@@ -180,9 +197,9 @@ Module Hsig_fol.
                                              |}
                                              ]
                                     ); ("term", [ {|
-                                                    con_parameters := [("f","nat")];
+                                                    con_parameters := [explArg "f" (nTerm nat_q)];
                                                     con_name := "Func";
-                                                    con_positions := [ {|pos_binders := []; pos_head := FunApp "cod" [nApp (nRef "fin") [nRef "f"]] [Atom "term"] |} ]
+                                                    con_positions := [ {|pos_binders := []; pos_head := FunApp AFCod [nApp (nRef "fin") [nRef "f"]] [Atom "term"] |} ]
                                                     (* con_positions := [ {|pos_binders := []; pos_head := Atom "term" |} ] *)
                                        |} ] )
                                   ].

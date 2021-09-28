@@ -10,6 +10,7 @@ Import GenM.Notations GenM.
 
 Definition nat_ := nTerm nat_q.
 Definition S_ (n: nterm) := nApp (nTerm S_q) [n].
+Definition plus_ (s t: nterm) := nApp (nTerm plus_q) [s; t].
 Definition fin_ (n: nterm) := nApp (nTerm fin_q) [n].
 Definition eq_ (s t: nterm) := nApp (nTerm eq_q) [nHole; s; t].
 Definition eq_refl_ := nApp (nTerm eq_refl_q) [nHole; nHole].
@@ -18,44 +19,87 @@ Definition eq_trans_ (s t: nterm) := nApp (nTerm eq_trans_q) [nHole; nHole; nHol
 Definition eq_sym_ (s: nterm) := nApp (nTerm eq_sym_q) [nHole; nHole; nHole; s].
 Definition eq_ind_r_ p px eqyx := nApp (nTerm eq_ind_r_q) [nHole; nHole; p; px; nHole; eqyx ].
 Definition f_equal_ (feq_lam s t H: nterm) := nApp (nTerm f_equal_q) [nHole; nHole; feq_lam; s; t; H].
-(* Definition up_ren_ (s: nterm) := nApp (nTerm up_ren_q) [nHole; nHole; s]. *)
-Definition up_ren_ (s: nterm) := nApp (nTerm up_ren_q) [s].
-(* Definition scons_ (s t: nterm) := nApp (nTerm scons_q) [nHole; nHole; s; t]. *)
-Definition scons_ (s t: nterm) := nApp (nTerm scons_q) [nHole; s; t].
-(* Definition var_zero_ := nApp (nTerm var_zero_q) [nHole]. *)
-Definition var_zero_ := nTerm var_zero_q.
 Definition funcomp_ (f g: nterm) : nterm := nApp (nTerm funcomp_q) [nHole; nHole; nHole; f; g].
-(* Definition shift_ := nApp (nTerm shift_q) [nHole]. *)
-Definition shift_ := nTerm shift_q.
 Definition id_ := nApp (nTerm id_q) [nHole].
-(* Definition up_ren_ren_ (xi zeta rho eq : nterm) := nApp (nTerm up_ren_ren_q) [nHole; nHole; nHole; xi; zeta; rho; eq]. *)
-Definition up_ren_ren_ (xi zeta rho eq : nterm) := nApp (nTerm up_ren_ren_q) [xi; zeta; rho; eq].
-
 Definition funcomps_ ss ts := map2 funcomp_ (sty_terms ss) (sty_terms ts).
+
+(* binderlist *)
+Definition var_zero_p_ (p: nterm) := nApp (nTerm fintype_var_zero_p_q) [p; nHole].
+Definition scons_p_ (p s t: nterm) := nApp (nTerm fintype_scons_p_q) [nHole; p; nHole; s; t].
+Definition shift_p_ (p: nterm) := nApp (nTerm fintype_shift_p_q) [p; nHole].
+Definition upRen_p_ (p s: nterm) := nApp (nTerm fintype_upRen_p_q) [p; nHole; nHole; s].
+Definition scons_p_eta_ (s t u: nterm) := nApp (nTerm fintype_scons_p_eta_q) [nHole; nHole; nHole; nHole; nHole; s; nHole; t; u].
+Definition scons_p_congr_ (s t: nterm) := nApp (nTerm fintype_scons_p_congr_q) [nHole; nHole; nHole; nHole; nHole; nHole; nHole; nHole; t; s].
+Definition scons_p_comp_ (s t u v: nterm) := nApp (nTerm fintype_scons_p_comp'_q) [nHole; nHole; nHole; nHole; s; t; u; v].
+Definition scons_p_head_ (s t u: nterm) := nApp (nTerm fintype_scons_p_head'_q) [nHole; nHole; nHole; s; t; u].
+Definition scons_p_tail_ (s t u: nterm) := nApp (nTerm fintype_scons_p_tail'_q) [nHole; nHole; nHole; s; t; u].
+Definition up_ren_ren_p_ (s: nterm) := nApp (nTerm fintype_up_ren_ren_p_q) [nHole; nHole; nHole; nHole; nHole; nHole; nHole; s].
+
 
 Notation "g >>> f" := (funcomp_ f g) (at level 70, no associativity).
 Notation "tt <<>> ss" := (funcomps_ ss tt) (at level 70, no associativity).
 
+
+(** * Helper functions based on scope type *)
+Definition scons_ (sc: scope_type) (s t: nterm) :=
+  match sc with
+  | Unscoped => nApp (nTerm unscoped_scons_q) [nHole; s; t]
+  | Wellscoped => nApp (nTerm fintype_scons_q) [nHole; nHole; s; t]
+  end.
+Definition var_zero_ (sc: scope_type) :=
+  match sc with
+  | Unscoped => nTerm unscoped_var_zero_q
+  | Wellscoped => nApp (nTerm fintype_var_zero_q) [nHole]
+  end.
+Definition shift_ (sc: scope_type) :=
+  match sc with
+  | Unscoped => nTerm unscoped_shift_q
+  | Wellscoped => nApp (nTerm fintype_shift_q) [nHole]
+  end.
+Definition up_ren_ (sc: scope_type) (s: nterm) :=
+  match sc with
+  | Unscoped => nApp (nTerm unscoped_up_ren_q) [s]
+  | Wellscoped => nApp (nTerm fintype_up_ren_q) [nHole; nHole; s]
+  end.
+Definition up_ren_ren_ (sc: scope_type) (xi zeta rho eq : nterm) :=
+  match sc with
+  | Unscoped => nApp (nTerm unscoped_up_ren_ren_q) [xi; zeta; rho; eq]
+  | Wellscoped => nApp (nTerm fintype_up_ren_ren_q) [nHole; nHole; nHole; xi; zeta; rho; eq]
+  end.
+
+(*** Functors *)
+(* TODO add other functors *)
+Definition functorMap_ f ts :=
+  match f with
+  | AFCod => nApp (nTerm cod_map_q) (List.app [nHole; nHole; nHole] ts)
+  | AFList => nApp (nTerm list_map_q) (List.app [nHole; nHole] ts)
+  end.
+Definition functorId_ f ts :=
+  match f with
+  | AFCod => nApp (nTerm cod_id_q) (List.app [nHole; nHole; nHole] ts)
+  | AFList => nApp (nTerm list_id_q) (List.app [nHole; nHole] ts)
+  end.
+Definition functorExt_ f ts :=
+  match f with
+  | AFCod => nApp (nTerm cod_ext_q) (List.app [nHole; nHole; nHole; nHole; nHole] ts)
+  | AFList => nApp (nTerm list_ext_q) (List.app [nHole; nHole; nHole; nHole] ts)
+  end.
+Definition functorComp_ f ts :=
+  match f with
+  | AFCod => nApp (nTerm cod_comp_q) (List.app [nHole; nHole; nHole; nHole; nHole; nHole; nHole] ts)
+  | AFList => nApp (nTerm list_comp_q) (List.app [nHole; nHole; nHole; nHole; nHole; nHole] ts)
+  end.
+Definition appFunctor_ f ts :=
+  match f with
+  | AFCod => nApp (nTerm cod_q) ts
+  | AFList => nApp (nTerm list_q) ts
+  end.
 
 (** Return a list of variable names for the input list of positions
  ** [s0, s2, ..., sn-1] *)
 Definition getPattern {A: Type} (name: string) (l: list A) :=
   mapi (fun i _ => name ++ string_of_nat i) l.
 
-
-(** * A representation of arguments that resembles to one from the Coq implementation.
- ** * When we build an application to some named constant, during translation to the
- ** * MetaCoq AST we pass a number of holes corresponding to how many arguments were
- ** * marked implicit in the call to `add_binders`
-
- ** * TODO atm we always prepend these holes to the given argument list. This has the
- ** * assumption that there are no implicit arguments after some non-implicit argument.
- ** * To fix this we would have to merge left-nested applications during the translation
- ** * and save the list of implicit positions instead of only their number.
- *)
-Record gallinaArg := { g_name : string; g_implicit : bool; g_type : nterm }.
-Definition implArg (name: string) (type: nterm) := {| g_name := name; g_implicit := true; g_type := type |}.
-Definition explArg (name: string) (type: nterm) := {| g_name := name; g_implicit := false; g_type := type |}.
 
 Definition process_implicits (name: string) (args: list gallinaArg) : t unit :=
   let implicits := List.map g_implicit args in
@@ -80,25 +124,28 @@ Definition process_lemma (name: string) (args: list gallinaArg) (innerType inner
 (** * The following definitions are just hardcoded for System F ty *)
 
 
-(** Construct the body of a definition depending on if the given sort matches the one in the binder *)
-Definition definitionBody (sort: tId) (binder: Binder) (singleMatch singleNoMatch: nterm) (* (f_listMatch: string -> tId -> term)  *) : nterm :=
+(** * Construct the body of a definition depending on if the given sort matches the one in the binder *)
+Definition definitionBody (sort: tId) (binder: Binder) (singleMatch singleNoMatch: nterm) (listMatch listNoMatch: string -> tId -> nterm) : nterm :=
   match binder with
-  | Single sort' => if eqb sort sort'
-                   then singleMatch
-                   else singleNoMatch
-  (* TODO binder list case *)
-  (* | L.BinderList (p, sort') -> *)
-  (*   let (listMatch, listNoMatch) = f_listMatch p sort' in *)
-  (*   if sort = sort' then listMatch else listNoMatch *)
+  | Single boundSort => if eqb sort boundSort
+                       then singleMatch
+                       else singleNoMatch
+  | BinderList p boundSort => if eqb sort boundSort
+                             then listMatch p boundSort
+                             else listNoMatch p boundSort
   end.
 
 (** Extract the extra shifting argument from a BinderList.
  ** In MetaCoq all binders are explicit so we don't even have the binvparameters function *)
-Definition bparameters (binder: Binder) : list term * list (term -> term) :=
+Definition binvparameters (binder: Binder) : list nterm * list gallinaArg :=
   match binder with
   | Single x => ([], [])
-(* | BinderList (m, _) -> ([ref_ m], [binder1_ ~implicit:true ~btype:nat_ m]) *)
+  | BinderList m _ => ([nRef m], [implArg m nat_])
   end.
+
+Definition bparameters (binder: Binder) : list nterm * list gallinaArg :=
+  let '(terms, binders) := binvparameters binder in
+  (terms, List.map makeExplicitArg binders).
 
 Definition abs_ref x t := nLambda x nHole t.
 Definition app_ref n ts := nApp (nRef n) ts.
@@ -131,7 +178,6 @@ Definition genVarArg (sort: string) (ns: substScope) : t nterm :=
 Definition app_constr (cname: string) (st: scope_type) (scope: substScope) (rest: list nterm) : nterm :=
   app_ref cname (List.app (ss_terms (is_wellscoped st) scope) rest).
 
-Definition map_ f ts := nApp (nRef (sep f "map")) ts.
 Definition var_constr (sort: tId) := nRef (varConstrName sort).
 
 (** Create an extensional equivalence between unary functions s & t
@@ -140,6 +186,71 @@ Definition equiv_ (n: nterm) (s t: nterm) : nterm :=
   let equality := eq_ (nApp s [ n ]) (nApp t [ n ]) in
   equality.
 
+Definition succ_ (n: nterm) (sort: tId) (b: Binder) :=
+  match b with
+  | Single boundSort => if eqb sort boundSort
+                       then S_ n
+                       else n
+  | BinderList m boundSort => if eqb sort boundSort
+                             then plus_ (nRef m) n
+                             else n
+  end.
+
+
+Definition up (sort: tId) (f: tId -> Binder -> nterm -> nterm) (n: list nterm) (b: Binder) : t (list nterm) :=
+  substSorts <- substOf sort;;
+  pure (map2 (fun p n_i => f p b n_i) substSorts n).
+
+Definition ups (sort: tId) (f: string -> Binder -> nterm -> nterm) := m_fold_left (up sort f).
+
+Definition upScope (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (n: nterm) => succ_ n z b) terms binders.
+
+Definition upRen (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (xi: nterm) => nApp (nRef (upRenName z b)) (List.app (fst (bparameters b)) [ xi ])) terms binders.
+
+(* TODO rename *)
+Definition upSubstS (sort: tId) (binders: list Binder) (terms: list nterm) := ups sort (fun (z: string) (b: Binder) (sigma: nterm) => nApp (nRef (upName z b)) (List.app (fst (bparameters b)) [ sigma ])) terms binders.
+
+Definition up' (x: string) (f: tId -> Binder -> nterm -> t nterm) (n: list nterm) (b: Binder) : t (list nterm) :=
+  substSorts <- substOf x;;
+  a_map (fun '(p, n_i) => f p b n_i) (combine substSorts n).
+
+Definition upEq (sort: tId) (binders: list Binder) (terms: list nterm) (f: tId -> Binder -> nterm -> t nterm) :=
+  m_fold_left (up' sort f) terms binders.
+
+Definition upSubstScope (sort: tId) (binders: list Binder) (ss: substScope) :=
+  match ss with
+  | SubstScope ns nts => fmap (fun nts => SubstScope ns nts) (upScope sort binders nts)
+  end.
+Definition upSubst (sort: tId) (binders: list Binder) (st: substTy) :=
+  match st with
+  | SubstRen nts => fmap (fun nts => SubstRen nts) (upRen sort binders nts)
+  | SubstSubst nts => fmap (fun nts => SubstSubst nts) (upSubstS sort binders nts)
+  | SubstEq nts f => fmap (fun nts => SubstEq nts f) (upEq sort binders nts f)
+  end.
+
+Definition cast (sort sort': tId) (nts: list nterm) :=
+  substSorts <- substOf sort;;
+  substSorts' <- substOf sort';;
+  pure (List.fold_right (fun '(x, v) ws => if list_mem x substSorts' then v :: ws else ws)
+                        [] (combine substSorts nts)).
+
+Definition castSubstScope (sort sort': tId) (ss: substScope) :=
+  match ss with
+  | SubstScope ns nts => fmap (fun nts => SubstScope ns nts) (cast sort sort' nts)
+  end.
+Definition castSubst (sort sort': tId) (st: substTy) :=
+  match st with
+  | SubstRen nts => fmap (fun nts => SubstRen nts) (cast sort sort' nts)
+  | SubstSubst nts => fmap (fun nts => SubstSubst nts) (cast sort sort' nts)
+  | SubstEq nts f => fmap (fun nts => SubstEq nts f) (cast sort sort' nts)
+  end.
+
+Definition castUpSubstScope (sort: tId) (binders: list Binder) (sort': tId) (ss: substScope) : t substScope :=
+  ss' <- castSubstScope sort sort' ss;;
+  upSubstScope sort' binders ss'.
+Definition castUpSubst (sort: tId) (binders: list Binder) (sort': tId) (st: substTy) : t substTy :=
+  st' <- castSubst sort sort' st;;
+  upSubst sort' binders st'.
 (** * Create an application of the var constructor for each element of the substitition vector
  ** * of the given sort
  ** * e.g. [ var_ty m_ty; var_vl m_ty m_vl ] *)
@@ -150,10 +261,6 @@ Definition mk_var_apps (sort: tId) (ms: substScope) : t (list nterm) :=
 ms' <- castSubstScope sort substSort ms;;
 pure (app_constr (varConstrName substSort) scope_type ms' []))
         substSorts.
-
-Definition mapId_ f ts := nApp (nRef (sep f "id")) ts.
-Definition mapExt_ f ts := nApp (nRef (sep f "ext")) ts.
-Definition mapComp_ f ts := nApp (nRef (sep f "comp")) ts.
 
 (** * Convert a renaming to a substitution by postcomposing it with the variable constructor
  ** * of the given sort. The domain of xis is the given ns *)
@@ -254,31 +361,66 @@ Definition introSortVar (name: string) (ms: substScope) (sort: tId) : t (nterm *
   pure (nRef name, explArg name (app_sort sort scope_type ms)).
 
 
-Definition shift (hasRen: bool) (sc: scope_type) (substSorts: list tId) (sort: tId) :=
-  if hasRen
-  then shift_
-  else funcomp_ (app_constr (varConstrName sort) sc (SubstScope (List.map (const "_") substSorts) (List.map (fun _ => nHole) substSorts)) []) shift_.
-
 Definition patternSId (sort: tId) (binder: Binder) :=
   substSorts <- substOf sort;;
   hasRen <- hasRenaming sort;;
-  scope_type <- get_scope_type;;
+  sc <- get_scope_type;;
+  let ss := SubstScope (List.map (const "_") substSorts)
+                       (List.map (const nHole) substSorts) in
+  let shift shiftSort :=
+      if hasRen
+      then shift_ sc
+      else shift_ sc
+                  >>> app_constr (varConstrName shiftSort) sc ss [] in
+  let shiftp p shiftSort :=
+      if hasRen
+      then shift_p_ (nRef p)
+      else shift_p_ (nRef p)
+                  >>> app_constr (varConstrName shiftSort) sc ss [] in
   up sort (fun substSort b _ => match b with
-                             | Single bsort =>
-                               if eqb substSort bsort then shift hasRen scope_type substSorts substSort else id_
+                             | Single boundSort =>
+                               if eqb substSort boundSort
+                               then shift substSort
+                               else id_
+                             | BinderList p boundSort =>
+                               if eqb substSort boundSort
+                               then shiftp p substSort
+                               else id_
+                             end)
+     (List.map nRef substSorts) binder.
+
+Definition patternSIdNoRen (sort: tId) (binder: Binder) :=
+  substSorts <- substOf sort;;
+  sc <- get_scope_type;;
+  let shift _ := shift_ sc in
+  let shiftp p _ := shift_p_ (nRef p) in
+  up sort (fun substSort b _ => match b with
+                             | Single boundSort =>
+                               if eqb substSort boundSort
+                               then shift substSort
+                               else nApp id_ [nHole]
+                             | BinderList p boundSort =>
+                               if eqb substSort boundSort
+                               then shiftp p substSort
+                               else nApp id_ [nHole]
                              end)
      (List.map nRef substSorts) binder.
 
 
-(* TODO borken indentation *)
 Definition mk_scons (sort: tId) (binder: Binder) (sigma: nterm) (ms: substScope) : t nterm :=
   scope_type <- get_scope_type;;
   match binder with
-  | Single sort' => if eqb sort sort'
-                   then
-let zero := app_constr (varConstrName sort) scope_type ms [var_zero_] in
-pure (scons_ zero sigma)
-                   else pure (sigma)
+  | Single boundSort =>
+    if eqb sort boundSort
+    then let zero := app_constr (varConstrName sort) scope_type ms [var_zero_ scope_type] in
+         pure (scons_ scope_type zero sigma)
+    else pure sigma
+  | BinderList p boundSort =>
+    if eqb sort boundSort
+    then let zero := var_zero_p_ (nRef p)
+                             >>> app_constr (varConstrName sort) scope_type ms [] in
+         pure (scons_p_ (nRef p) zero sigma)
+    else pure sigma
   end.
 
 Definition upSubstT (binder: Binder) (sort: tId) (sigma: nterm) (ms: substScope) : t nterm :=
@@ -305,189 +447,6 @@ Definition matchFin_ '{| g_name := bname; g_type := btype |} (equality: nterm) (
     pure (nCase "option" 1 elimPred s branches)
   end.
 
-(* Definition testmatchfin : t term := *)
-(*   '(n, bns) <- introScopeVarS "n";; *)
-(*   '(x, bx) <- introUpVar "x" n;; *)
-(*   let innerType := eq_ (nRef "nat") (nRef "nat") in *)
-(*   let t := fun (n: nterm) => eq_refl_ in *)
-(*   matchFin <- matchFin_ bx innerType x t eq_refl_;; *)
-(*   let proof := add_binders (List.app bns [bx]) matchFin in *)
-(*   translate proof. *)
-
-(* Definition testfin : t term := *)
-(*   '(n, bns) <- introScopeVarS "n";; *)
-(*   '(x, bx) <- introUpVar "x" n;; *)
-(*   let innerType := nHole in *)
-(*   let proof := add_binders (List.app bns [bx]) x in *)
-(*   translate proof. *)
-
-(* From ASUB Require Import core unscoped fintype. *)
-
-(* Definition asb : forall n (x: fin (S n)), nat = nat := *)
-(*   (fun (n:nat) (x: fin (S n)) => *)
-(* match x with *)
-(* | None => eq_refl *)
-(* | Some fin_n => eq_refl *)
-(* end). *)
-
-
-(* MetaCoq Quote Definition abs_source := Eval hnf in asb. *)
-
-(*
-
-
-tLambda {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-  (tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} [])
-  (tLambda {| binder_name := nNamed "x"; binder_relevance := Relevant |}
-     (tApp (tConst (MPfile ["fintype"; "static"; "src"; "ASUB"], "fin") [])
-        [tApp
-           (tConstruct
-              {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} 1 [])
-           [tRel 0]])
-     (tCase
-        ({| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "option"); inductive_ind := 0 |}, 1,
-        Relevant)
-        (tLambda {| binder_name := nNamed "x"; binder_relevance := Relevant |}
-           (tApp
-              (tInd
-                 {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "option"); inductive_ind := 0 |}
-                 [])
-              [tApp
-                 (tFix
-                    [{|
-                       dname := {| binder_name := nNamed "fin"; binder_relevance := Relevant |};
-                       dtype :=
-                         tProd {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                           (tInd
-                              {|
-                                inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                inductive_ind := 0
-                              |} [])
-                           (tSort (Universe.of_levels (inr (Level.Level "ASUB.src.static.fintype.9"))));
-                       dbody :=
-                         tLambda {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                           (tInd
-                              {|
-                                inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                inductive_ind := 0
-                              |} [])
-                           (tCase
-                              ({|
-                                 inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                 inductive_ind := 0
-                               |}, 0, Relevant)
-                              (tLambda {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                                 (tInd
-                                    {|
-                                      inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                      inductive_ind := 0
-                                    |} [])
-                                 (tSort (Universe.of_levels (inr (Level.Level "ASUB.src.static.fintype.9")))))
-                              (tRel 0)
-                              [(0,
-                               tInd
-                                 {|
-                                   inductive_mind := (MPfile ["Logic"; "Init"; "Coq"], "False");
-                                   inductive_ind := 0
-                                 |} []);
-                              (1,
-                              tLambda {| binder_name := nNamed "m"; binder_relevance := Relevant |}
-                                (tInd
-                                   {|
-                                     inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                     inductive_ind := 0
-                                   |} [])
-                                (tApp
-                                   (tInd
-                                      {|
-                                        inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "option");
-                                        inductive_ind := 0
-                                      |} []) [tApp (tRel 2) [tRel 0]]))]);
-                       rarg := 0
-                     |}] 0) [tRel 1]])
-           (tApp (tInd {| inductive_mind := (MPfile ["Logic"; "Init"; "Coq"], "eq"); inductive_ind := 0 |} [])
-              [tSort (Universe.of_levels (inr Level.lSet));
-              tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} [];
-              tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} []]))
-        (tRel 0)
-        [(1,
-         tLambda {| binder_name := nNamed "fin_n"; binder_relevance := Relevant |}
-           (tApp
-              (tFix
-                 [{|
-                    dname := {| binder_name := nNamed "fin"; binder_relevance := Relevant |};
-                    dtype :=
-                      tProd {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                        (tInd
-                           {|
-                             inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                             inductive_ind := 0
-                           |} []) (tSort (Universe.of_levels (inr (Level.Level "ASUB.src.static.fintype.9"))));
-                    dbody :=
-                      tLambda {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                        (tInd
-                           {|
-                             inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                             inductive_ind := 0
-                           |} [])
-                        (tCase
-                           ({|
-                              inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                              inductive_ind := 0
-                            |}, 0, Relevant)
-                           (tLambda {| binder_name := nNamed "n"; binder_relevance := Relevant |}
-                              (tInd
-                                 {|
-                                   inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                   inductive_ind := 0
-                                 |} [])
-                              (tSort (Universe.of_levels (inr (Level.Level "ASUB.src.static.fintype.9")))))
-                           (tRel 0)
-                           [(0,
-                            tInd
-                              {|
-                                inductive_mind := (MPfile ["Logic"; "Init"; "Coq"], "False");
-                                inductive_ind := 0
-                              |} []);
-                           (1,
-                           tLambda {| binder_name := nNamed "m"; binder_relevance := Relevant |}
-                             (tInd
-                                {|
-                                  inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat");
-                                  inductive_ind := 0
-                                |} [])
-                             (tApp
-                                (tInd
-                                   {|
-                                     inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "option");
-                                     inductive_ind := 0
-                                   |} []) [tApp (tRel 2) [tRel 0]]))]);
-                    rarg := 0
-                  |}] 0) [tRel 1])
-           (tApp
-              (tConstruct {| inductive_mind := (MPfile ["Logic"; "Init"; "Coq"], "eq"); inductive_ind := 0 |}
-                 0 [])
-              [tSort (Universe.of_levels (inr Level.lSet));
-              tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} []]));
-        (0,
-        tApp
-          (tConstruct {| inductive_mind := (MPfile ["Logic"; "Init"; "Coq"], "eq"); inductive_ind := 0 |} 0 [])
-          [tSort (Universe.of_levels (inr Level.lSet));
-          tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} []])]))
-
- *)
-(* Eval cbv in (run testfin {| R_flags := {| fl_scope_type := Wellscoped |}; R_sig := Hsig_example.mySig; R_env := initial_env |} empty_state). *)
-(* Eval cbv in (run testmatchfin {| R_flags := {| fl_scope_type := Wellscoped |}; R_sig := Hsig_example.mySig; R_env := initial_env |} empty_state). *)
-
-(* From MetaCoq.Template Require Import All. *)
-
-(* MetaCoq Run *)
-(*         (match (run testmatchfin {| R_flags := {| fl_scope_type := Wellscoped |}; R_sig := Hsig_example.mySig; R_env := initial_env |} empty_state) with *)
-(*          | inl e => tmPrint e *)
-(*          | inr (_, _, x) => *)
-(*            tmBind (tmUnquoteTyped (forall (n: nat) (x: fin (S n)), nat = nat) x) (fun _ => tmReturn tt) *)
-(*          end). *)
-
 Definition comp_ren_or_subst (sort: tId) (stys1 stys2: substTy) :=
   substSorts <- substOf sort;;
   renOrSubstName <- match stys1 with
@@ -505,20 +464,16 @@ pure (sty2 >>> app_ref (renOrSubstName substSort) (sty_terms stys1')))
  ** * TODO the universe of fintype might change between Coq versions or due to other reasons. Can we do it differently? *)
 Definition scoped_arity : term :=
   tSort (Universe.from_kernel_repr (Level.lSet, false)
-                                   [(Level.Level "ASUB.src.static.fintype.9", false)]).
+                                   [(Level.Level "ASUB.src.static.fintype.9", false)
+                                   
+        ]).
 
 Definition unscoped_arity : term :=
   tSort Universe.type0.
-
-Definition succ_ (n: nterm) (sort: tId) (binder: Binder) :=
-  match binder with
-  | Single boundSort => if eqb sort boundSort
-                       then S_ n
-                       else n
-  end.
 
 Definition genFixpoint (genF : tId -> t (def nterm)) (component: NEList.t tId) : t (list lemma) :=
   let componentL := NEList.to_list component in
   isRec <- isRecursive component;;
   fexprs <- a_map genF componentL;;
   buildFixpoint fexprs isRec.
+
