@@ -107,10 +107,7 @@ Definition fol : autosubstLanguage :=
                     All : (bind term in form) -> form;
                     Ex : (bind term in form) -> form }} |}.
 
-Module fol_fintype.
-  (* From ASUB Require Import core fintype. *)
-  Import TemplateMonadNotations.
-
+Module fol.
   Inductive term (n_term : nat) : Type :=
   | var_term : fin n_term -> term n_term
   | Func : forall (f : nat), (cod (fin f) (term n_term)) -> term n_term.
@@ -122,11 +119,25 @@ Module fol_fintype.
   | Disj : form n_term -> form n_term -> form n_term
   | All : form (S n_term) -> form n_term
   | Ex : form (S n_term) -> form n_term.
+End fol.
+
+Module fol_fintype.
+  Include fol.
+  (* From ASUB Require Import core fintype. *)
+  Import TemplateMonadNotations.
+
 
   MetaCoq Run (translate_signature fol >>= fun sig => tmPrint (getIndCtorNames sig)).
 
   MetaCoq Run AutosubstNoInd Wellscoped for fol.
 End fol_fintype.
+
+Module fol_unscoped.
+  Include fol.
+
+  (* TODO should signal not supported *)
+  Fail MetaCoq Run AutosubstNoInd Unscoped for fol.
+End fol_unscoped.
       
 Definition variadic : autosubstLanguage :=
   {| al_sorts := <{ tm : Type  }>;
@@ -140,14 +151,14 @@ Module variadic_fintype.
   | app : tm n_tm -> list (tm n_tm) -> tm n_tm
   | lam : forall p : nat, tm (plus p n_tm) -> tm n_tm.
 
-  (* TODO method not implemented *)
-  (* MetaCoq Run AutosubstNoInd Wellscoped for variadic. *)
+  MetaCoq Run AutosubstNoInd Wellscoped for variadic.
 End variadic_fintype.
 
 Module variadic_unscoped.
 
-  (* TODO still uses some _list_ lemma *)
-  (* MetaCoq Run Autosubst Unscoped for variadic. *)
+  (* TODO should signal not supported *)
+  (* XXX apparently the universe constraints are only relevant for scoped syntax? because this defined tm *)
+  Fail MetaCoq Run Autosubst Unscoped for variadic.
 End variadic_unscoped.
 
 (* XXX lower-case lambda does not work as a Coq identifier. But apparently this approach works with all identifiers, e.g. upper-case lambda *)

@@ -13,7 +13,12 @@ Definition S_ (n: nterm) := nApp (nTerm S_q) [n].
 Definition plus_ (s t: nterm) := nApp (nTerm plus_q) [s; t].
 Definition fin_ (n: nterm) := nApp (nTerm fin_q) [n].
 Definition eq_ (s t: nterm) := nApp (nTerm eq_q) [nHole; s; t].
-Definition eq_refl_ := nApp (nTerm eq_refl_q) [nHole; nHole].
+Definition eq_refl'_ (sO: option nterm) :=
+  match sO with
+  | None => nApp (nTerm eq_refl_q) [nHole; nHole]
+  | Some s => nApp (nTerm eq_refl_q) [nHole; s]
+  end.
+Definition eq_refl_ := eq_refl'_ None.
 Definition ap_ (s t: nterm) := nApp (nTerm ap_q) [ nHole; nHole; s; nHole; nHole; t ].
 Definition eq_trans_ (s t: nterm) := nApp (nTerm eq_trans_q) [nHole; nHole; nHole; nHole; s; t].
 Definition eq_sym_ (s: nterm) := nApp (nTerm eq_sym_q) [nHole; nHole; nHole; s].
