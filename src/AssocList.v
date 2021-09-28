@@ -186,6 +186,10 @@ Module FMap (X: Discrete).
     | [] => []
     | (k, v) :: A' => addCollect (fromListCollect A') k v
     end.
+
+  Definition toList {elt: Type} (A: t elt) : list (key * elt) := A.
+
+  Definition values {elt: Type} (A: t elt) : list elt := List.map snd A.
   
 End FMap. 
 
@@ -238,6 +242,8 @@ Module FSet (X: Discrete).
     | v :: l =>
       add (fromList l) v
     end.
+
+  Definition toList (s: t) : list elt := s.
 
   Fixpoint union (s0 s1: t) : t :=
     match s0 with
