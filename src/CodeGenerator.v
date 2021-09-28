@@ -286,10 +286,12 @@ Module TemplateMonadInterface.
       lemmas_eval <- tmEval TemplateMonad.Common.all lemmas;;
       monad_map tmTypedDefinition lemmas_eval;; 
       env' <- tm_update_env names env;;
-      tmReturn {| in_env := env';
-                  in_implicits := implicits;
-                  in_flags := flags;
-                  in_sig := sig |}
+      let new_info := {| in_env := env';
+                         in_implicits := implicits;
+                         in_flags := flags;
+                         in_sig := sig |} in
+      new_info_eval <- tmEval TemplateMonad.Common.all new_info;;
+      tmReturn new_info_eval
     end. 
 
   (* give a name to the persistent information between code generation calls
@@ -2151,15 +2153,15 @@ End generation_pi.
 (*   Import Setoid Morphisms. *)
 (*   Compute upList_ty. *)
 (*   Compute upList_tm. *)
-(*   (* Compute (GenM.run (genUpRens upList_ty) Hsig_example.mySig empty_state). *) *)
 (*   MetaCoq Run (generateInductives ("ty", []) fcbv_info *)
 (*                                  >>= composeGeneration "env0"). *)
 (*   MetaCoq Run (generateInductives ("tm", ["vl"]) env0 *)
 (*                                  >>= composeGeneration "env1"). *)
-(*   MetaCoq Run (generateLemmas ("ty",[]) upList_ty env1  *)
+(*   MetaCoq Run (generateLemmas ("ty",[]) upList_ty env1 *)
 (*                               >>= composeGeneration "env2"). *)
 (*   (* TODO takes way too long with over 2 minutes! *) *)
-(*   MetaCoq Run (generateLemmas ("tm", ["vl"]) upList_tm env2 *)
+(*   (*  somewhat better with intermediate evaluation but still slow *) *)
+(*   Time MetaCoq Run (generateLemmas ("tm", ["vl"]) upList_tm env2 *)
 (*                               >>= composeGeneration "env3"). *)
 (*   (* implicit lookup in nRef translation: 18s *) *)
 (*   (* implicit lookup in nApp translation: 15s *) *)
