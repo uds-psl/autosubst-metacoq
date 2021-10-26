@@ -3,9 +3,8 @@ Require Import String.
 #[ local ]
  Open Scope string.
 
-From MetaCoq.Template Require Import All.
 
-From ASUB Require Import Autosubst ErrorM CustomEntryParser Language Flags TemplateMonadUtils.
+From ASUB Require Import Autosubst.
 Import SyntaxNotation.
 
 

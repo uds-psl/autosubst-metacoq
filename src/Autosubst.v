@@ -3,12 +3,14 @@ Require Import List String.
 Import ListNotations.
 
 
-From MetaCoq.Template Require Import All.
-From ASUB Require Import CodeGenDispatch Language ErrorM GenM CustomEntryParser Flags AssocList TemplateMonadUtils.
-Import TemplateMonadNotations.
+From MetaCoq.Template Require Export All.
+From ASUB Require Import CodeGenDispatch ErrorM GenM AssocList TemplateMonadUtils.
+From ASUB Require Export CustomEntryParser Language Flags.
 
-(** * Open the notations *)
-Export SyntaxTranslation Syntax.
+
+Import TemplateMonadNotations.
+Import SyntaxTranslation Syntax.
+
 
 Definition runAutosubst (lang: autosubstLanguage) (flags : Flags): TemplateMonad unit :=
   sig <- translate_signature lang;;
