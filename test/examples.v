@@ -3,9 +3,7 @@ Require Import String.
 #[ local ]
  Open Scope string.
 
-
 From ASUB Require Import Autosubst.
-Import SyntaxNotation.
 
 
 (* The untyped lambda calculus. *)

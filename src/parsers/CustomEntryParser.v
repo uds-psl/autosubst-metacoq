@@ -279,22 +279,22 @@ Module SyntaxExample.
   Definition fol : autosubstLanguage :=
     {| al_sorts := <{ term : Type;
                       form : Type }>;
-                                   al_ctors := {{ Func (f : nat) : codF (fin f) (term) -> term;
-                                                  Fal : form;
-                                                  Pred (p : nat) : codF (fin p) (term) -> form;
-                                                  Impl : form -> form -> form;
-                                                  Conj : form -> form -> form;
-                                                  Disj : form -> form -> form;
-                                                  All : (bind term in form) -> form;
-                                                  Ex : (bind term in form) -> form }} |}.
+      al_ctors := {{ Func (f : nat) : codF (fin f) (term) -> term;
+                    Fal : form;
+                    Pred (p : nat) : codF (fin p) (term) -> form;
+                    Impl : form -> form -> form;
+                    Conj : form -> form -> form;
+                    Disj : form -> form -> form;
+                    All : (bind term in form) -> form;
+                    Ex : (bind term in form) -> form }} |}.
 
   MetaCoq Run (translate_signature fol >>= tmPrint).
 
   
   Definition variadic : autosubstLanguage :=
     {| al_sorts := <{ tm : Type  }>;
-                                  al_ctors := {{ app : tm -> listF (tm) -> tm;
-                                                 lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}.
+      al_ctors := {{ app : tm -> listF (tm) -> tm;
+                      lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}.
 
   MetaCoq Run (translate_signature variadic >>= tmPrint).
 End SyntaxExample.

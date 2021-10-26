@@ -2,14 +2,15 @@ Require Import List String.
 
 Import ListNotations.
 
-
+(* Export the correct modules so that a user only has to Import this module.
+ * We need MetaCoq, Flags for Unscoped/Wellscoped and Syntax and SyntaxNotation for the language specifications. *)
 From MetaCoq.Template Require Export All.
-From ASUB Require Import CodeGenDispatch ErrorM GenM AssocList TemplateMonadUtils.
-From ASUB Require Export CustomEntryParser Language Flags.
-
+From ASUB Require Import CodeGenDispatch ErrorM GenM AssocList TemplateMonadUtils CustomEntryParser Language.
+From ASUB Require Export Flags.
+Export Syntax SyntaxNotation.
 
 Import TemplateMonadNotations.
-Import SyntaxTranslation Syntax.
+Import SyntaxTranslation.
 
 
 Definition runAutosubst (lang: autosubstLanguage) (flags : Flags): TemplateMonad unit :=

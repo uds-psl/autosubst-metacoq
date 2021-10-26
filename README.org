@@ -48,12 +48,10 @@ make -f Makefile.coq
 #+END_SRC
 
 * Run 
-To run Autosubst MetaCoq we must first import the Autosubst module, this will also load MetaCoq.
-To specify a language with our input syntax, we addititonally import the SyntaxNotation module.
+To run Autosubst MetaCoq we must first import the Autosubst module, this will also load MetaCoq and the modules for the input syntax.
 Then there are two commands to run Autosubst:
 #+BEGIN_SRC bash
 From ASUB Require Import Autosubst.
-Import SyntaxNotation.
 
 MetaCoq Run Autosubst <scope> for <lang>.
 MetaCoq Run AutosubstNoInd <scope> for <lang>.
