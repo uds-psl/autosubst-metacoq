@@ -25,6 +25,7 @@ It is best practice to create a new opam switch to not cause conflicts with any 
 We will also need to add the Coq repository.
 #+BEGIN_SRC bash
 opam switch create autosubst-metacoq ocaml-base-compiler.4.09.1
+eval $(opam env)
 opam repo add coq-released https://coq.inria.fr/opam/released
 #+END_SRC
 
@@ -58,8 +59,11 @@ MetaCoq Run Autosubst <scope> for <lang>.
 MetaCoq Run AutosubstNoInd <scope> for <lang>.
 #+END_SRC
 Both commands take a value of type scope_type (Unscoped|Wellscoped) and a language definition of type autosubstLanguage.
+
 scope_type is defined in ./src/Flags.v
+
 autosubstLanguage is defined in ./src/parsers/CustomEntryParser.v
+
 The `AutosubstNoInd` version is for languages that contain functors.
 At the moment we are not able to generate inductive types that contain functors due to universe constraint errors when unquoting.
 So for these languages, a user must implement the inductive type beforehand.
