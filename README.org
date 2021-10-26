@@ -1,18 +1,19 @@
 #+TITLE: Autosubst MetaCoq
 
 This is a MetaCoq reimplementation of the Autosubst 2 code generator by Kathrin Stark. 
-Like Autosubst 2, it supports well-scoped & unscoped syntax as well as variadic & polyadic syntax.
+It uses the MetaCoq framework to implement a code generator for syntax with binders.
+
+Like Autosubst 2, it supports well-scoped & unscoped syntax as well as variadic syntax and some functors like list and the codomain functor.
 
 The MetaCoq reimplementation is unfortunately missing some features:
-- use of functional extensionality
-- the improved asimpl of Autosubst OCaml
+- generating lemmas with functional extensionality
+- generating lemmas with the "pointwise_relation"
+- generating the improved asimpl of Autosubst OCaml (uses the lemmas from the previous point)
 - Notations
 
-As such it is unfortunately an incomplete reimplementation. Even though it generates some automation tactics. The 
+As such it is unfortunately an incomplete reimplementation. We can not automatically prove substitution equations like Autosubst 2 or Autosubst OCaml.
+But it still generates inductive types and rewriting lemmas that can be used to manually prove substitution equations.
 
-Also, it does not support Autosubst 2's modular syntax.
-
-It uses the MetaCoq framework to implement a code generator for syntax with binders.
 
 * Install
 ** Opam 
@@ -37,34 +38,35 @@ You can compile all Coq sources with
 make
 #+END_SRC
 
-
 * Run 
 You can run Autosubst MetaCoq by requiring the Autosubst module.
+In the file test/examples.v, you can find examples of how to run the program, as well as comments where to be careful.
 
+In test/examples.v we prove a substitution equation for the untyped lambda calculus.
+Because we're missing both the funext and the pointwise_relation lemmas, we use funext manually to prove the equation.
 
 ** Signatures
-You specify the input language using a special syntax. 
+You specify the language for which to generate code with our input syntax.
 The syntax is described in my thesis at https://www.ps.uni-saarland.de/~dapprich/bachelor.php
-Look in the signaturs/ directory for more examples.
+The only difference in the MetaCoq version of the syntax is that functors have special names ending in "F", e.g. codF and listF
+and they are not contained in quotation marks.
 
-The following example contains all possible rules.
+There are several examples of languages in test/examples.v
+
+The following example is for the call-by-value System F.
 #+begin_src
--- comments are like in Haskell
-tm : Type -- sort declarations
-nat : Type -- preexisting sort declaration, it must not have any constructors
-
-list : Functor -- functor declarations, only "list", "prod", and "cod" are allowed
-
--- declaring some constructors for ty
-arr : ty -> ty -> ty
-all : (bind ty in ty) -> ty -- this declares "all" as constructor with a binder that binds a new "ty" variable in a "ty" argument and results in a "ty"
-
--- declaring some constructos for tm
-app : tm -> list (tm) -> tm               -- application of the list functor to the sort "tm"
-lam (p: nat) : (bind <p, tm> in tm) -> tm -- this declares "lam" as a constructor with parameter "p" which is then used in a variadic binder (i.e. it binds p-many values of "tm")
-const : nat -> tm                         
+Definition fcbv : autosubstLanguage :=
+  {| al_sorts := <{ ty : Type;
+                    tm : Type;
+                    vl : Type }>;
+    al_ctors := {{ arr : ty -> ty -> ty;
+                   all : (bind ty in ty) -> ty;
+                   app : tm -> tm -> tm;
+                   tapp : tm -> ty -> tm;
+                   vt : vl -> tm;
+                   lam : ty -> (bind vl in tm) -> vl;
+                   tlam : (bind ty in tm) -> vl }} |}.
 #+end_src
-
 
 * Repo
 You can find the code at https://gitlab.com/uds-psl/autosubst-metacoq
