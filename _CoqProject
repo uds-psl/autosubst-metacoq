@@ -1,53 +1,42 @@
 -Q . ASUB
 
-# listimport/samefile.v
-# listimport/importfile1.v
-# listimport/importfile2.v
-# listimport/localimport1.v
-# listimport/localimport2.v
-# listimport/myrewrite1.v
-# listimport/myrewrite2.v
-
-# pocs/arguments.v
 
 src/static/core.v
+src/static/core_axioms.v
 src/static/fintype.v
 src/static/unscoped.v
-src/static/fcbv_unscoped.v
+src/static/fintype_axioms.v
+src/static/unscoped_axioms.v
 
 src/parsers/IdentParsing.v
 src/Utils.v
+src/Quotes.v
 src/NEList.v
-src/Names.v
-src/SubstTy.v
 src/Flags.v
 src/Nterm.v
-src/GenUps.v
 # src/VariableDSL.v
-src/TemplateMonadUtils.v
 src/AssocList.v
-src/Language.v
-# src/parsers/NotationParser.v
-src/parsers/CustomEntryParser.v
-# src/parsers/InductiveParser.v
-src/Quotes.v
-src/Termutil.v
 src/Monad.v
 src/ErrorM.v
+src/Language.v
 src/GenM.v
+src/TemplateMonadUtils.v
+src/GenUps.v
+src/Names.v
+src/SubstTy.v
 src/Graph.v
 src/SigAnalyzer.v
 src/DeBruijnMap.v
 src/GallinaGen.v
+src/Termutil.v
+src/parsers/CustomEntryParser.v
 src/CodeGenerator.v
+
+src/Tactics.v
+src/AutomationGenerator.v
+
 src/CodeGenDispatch.v
 src/Autosubst.v
 
-# src/testimport.v
+# test/examples.v
 
-# pathologic_graphs/pathologic_graph_5_3.v
-# pathologic_graphs/pathologic_graph_10_2.v
-# pathologic_graphs/pathologic_graph_10_3.v
-# pathologic_graphs/pathologic_graph_10_4.v
-# pathologic_graphs/pathologic_graph_12_3.v
-# pathologic_graphs/pathologic_graph_14_3.v

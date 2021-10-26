@@ -13,20 +13,20 @@ Module Syntax.
 
   Record SyntaxSort := { hsort_name : string; hsort_var_name : option string }.
   Inductive SyntaxBinder :=
-  | HSingle : tId -> SyntaxBinder
-  | HBinderList : string -> tId -> SyntaxBinder.
+   | HSingle : tId -> SyntaxBinder
+   | HBinderList : string -> tId -> SyntaxBinder.
   Inductive SyntaxSexpr :=
    | SAtom : string -> SyntaxSexpr
    | SCons : SyntaxSexpr -> SyntaxSexpr -> SyntaxSexpr.
 
   Inductive SyntaxArgHead := HAtom : tId -> SyntaxArgHead
-                         | HFunApp : AutosubstFunctor -> list SyntaxSexpr -> list SyntaxArgHead -> SyntaxArgHead.
+                           | HFunApp : AutosubstFunctor -> list SyntaxSexpr -> list SyntaxArgHead -> SyntaxArgHead.
   Record SyntaxPosition := { hpos_binders : list SyntaxBinder;
-                           hpos_head : SyntaxArgHead }.
+                             hpos_head : SyntaxArgHead }.
   Record SyntaxParameter := { hpar_name : string; hpar_sort : string }.
   Record SyntaxConstructor := { hcon_parameters : list SyntaxParameter;
-                              hcon_name : string;
-                              hcon_positions : list SyntaxPosition }.
+                                hcon_name : string;
+                                hcon_positions : list SyntaxPosition }.
   Record autosubstLanguage := { al_sorts : list SyntaxSort; al_ctors : list SyntaxConstructor }.
 
 End Syntax.
@@ -75,14 +75,14 @@ Module SyntaxNotation.
   (** * Declaring a constructor with parameters *)
   Notation " x ( p0 , .. , p1 ) : y -> .. -> z " :=
     {| hcon_parameters := (@cons SyntaxParameter p0 .. (@cons SyntaxParameter p1 nil) .. );
-        hcon_name:=x;
-        hcon_positions := (@cons SyntaxPosition z .. (@cons SyntaxPosition y nil) ..) |}
+       hcon_name:=x;
+       hcon_positions := (@cons SyntaxPosition z .. (@cons SyntaxPosition y nil) ..) |}
       (in custom syntax_ctors at level 70, x custom syntax_ident, p0 custom syntax_params at level 2, p1 custom syntax_params at level 2, y custom syntax_positions at level 2, z custom syntax_positions at level 2, no associativity, only parsing).
   (** * Declaring a consturctor without parameters *)
   Notation " x : y -> .. -> z " :=
     {| hcon_parameters := nil;
-        hcon_name:=x;
-        hcon_positions := (@cons SyntaxPosition z .. (@cons SyntaxPosition y nil) ..) |}
+       hcon_name:=x;
+       hcon_positions := (@cons SyntaxPosition z .. (@cons SyntaxPosition y nil) ..) |}
       (in custom syntax_ctors at level 70, x custom syntax_ident, y custom syntax_positions at level 2, z custom syntax_positions at level 2, no associativity, only parsing).
   
   (*** Parameters *)
@@ -198,7 +198,7 @@ Module SyntaxTranslation.
       positions <- monad_map translate_position hpositions;;
       tmReturn (target, List.rev positions)
     end.
-           
+  
   Definition translate_parameter (hp: SyntaxParameter) : gallinaArg :=
     explArg hp.(hpar_name) (nRef hp.(hpar_sort)).
 
@@ -276,25 +276,25 @@ Module SyntaxExample.
   Definition lang := {| al_sorts := fcbv_sorts; al_ctors := fcbv_constrs |}.
   MetaCoq Run (translate_signature lang >>= tmPrint).
 
-Definition fol : autosubstLanguage :=
-  {| al_sorts := <{ term : Type;
-                    form : Type }>;
-     al_ctors := {{ Func (f : nat) : codF (fin f) (term) -> term;
-                    Fal : form;
-                    Pred (p : nat) : codF (fin p) (term) -> form;
-                    Impl : form -> form -> form;
-                    Conj : form -> form -> form;
-                    Disj : form -> form -> form;
-                    All : (bind term in form) -> form;
-                    Ex : (bind term in form) -> form }} |}.
+  Definition fol : autosubstLanguage :=
+    {| al_sorts := <{ term : Type;
+                      form : Type }>;
+                                   al_ctors := {{ Func (f : nat) : codF (fin f) (term) -> term;
+                                                  Fal : form;
+                                                  Pred (p : nat) : codF (fin p) (term) -> form;
+                                                  Impl : form -> form -> form;
+                                                  Conj : form -> form -> form;
+                                                  Disj : form -> form -> form;
+                                                  All : (bind term in form) -> form;
+                                                  Ex : (bind term in form) -> form }} |}.
 
   MetaCoq Run (translate_signature fol >>= tmPrint).
 
   
-Definition variadic : autosubstLanguage :=
-  {| al_sorts := <{ tm : Type  }>;
-     al_ctors := {{ app : tm -> listF (tm) -> tm;
-                    lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}.
+  Definition variadic : autosubstLanguage :=
+    {| al_sorts := <{ tm : Type  }>;
+                                  al_ctors := {{ app : tm -> listF (tm) -> tm;
+                                                 lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}.
 
-MetaCoq Run (translate_signature variadic >>= tmPrint).
+  MetaCoq Run (translate_signature variadic >>= tmPrint).
 End SyntaxExample.

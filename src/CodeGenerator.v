@@ -9,287 +9,37 @@ From MetaCoq.Template Require Import All.
 From ASUB Require Import AssocList Language Quotes Utils DeBruijnMap Monad TemplateMonadUtils Names Nterm GallinaGen GenM Termutil SubstTy GenUps Flags.
 Import TemplateMonadNotations.
 
-Module fcbv.
-  
-  From ASUB Require Import CustomEntryParser.
-  Import SyntaxNotation Syntax SyntaxTranslation.
-Definition fcbv : autosubstLanguage :=
-  {| al_sorts := <{ ty : Type;
-                    tm : Type;
-                    vl : Type }>;
-    al_ctors := {{ arr : ty -> ty -> ty;
-                   all : (bind ty in ty) -> ty;
-                   app : tm -> tm -> tm;
-                   tapp : tm -> ty -> tm;
-                   vt : vl -> tm;
-                   lam : ty -> (bind vl in tm) -> vl;
-                   tlam : (bind ty in tm) -> vl }} |}.
-
-  From ASUB Require Import SigAnalyzer ErrorM.
-
-  MetaCoq Run (translate_signature fcbv >>= tmDefinition "fcbv_sig").
-  Compute fcbv_sig.
-
-  Definition fcbv_info := {| in_flags := {| fl_scope_type := Wellscoped |};
-                             in_implicits := SFMap.empty;
-                             in_sig := fcbv_sig;
-                             in_env := initial_env |}.
-End fcbv.
-Import fcbv.
-
-Module GenUpsExample_fcbv.
-  Import GenM.Notations GenM.
-  
-  Definition upList_ty :=
-    let m := substSorts <- substOf "ty";;
-             sc <- get_scope_type;;
-             let '(_, upList) := getUps substSorts [] sc in
-             pure upList in
-    match runInfo m fcbv_info with
-    | inl _ => []
-    | inr (_, _, x) => x
-    end.
-  Compute upList_ty.
-
-  Definition upList_tm :=
-    let m := substSorts_ty <- substOf "ty";;
-             substSorts <- substOf "tm";;
-             sc <- get_scope_type;;
-             let '(combinations, _) := getUps substSorts_ty [] sc in
-             let '(_, upList) := getUps substSorts combinations sc in
-             pure upList in
-    match runInfo m fcbv_info with
-    | inr (_, _, x) => x
-    | _ => []
-    end.
-
-  Compute upList_tm.
-End GenUpsExample_fcbv.
-Import GenUpsExample_fcbv.
-
-(* Module stlc. *)
-(*   From ASUB Require Import CustomEntryParser. *)
-(*   Import HOASNotation2. *)
-(*   Definition stlc : autosubstLanguage := *)
-(*     {| al_sorts := <{ ty : Type; *)
-(*                       tm : Type }>;  *)
-(*                                  al_ctors := {{ Base : - ty; *)
-(*                                                 Fun : ty -> ty - ty; *)
-(*                                                 app : tm -> tm - tm; *)
-(*                                                 lam : ty -> (bind tm in tm) - tm }} |}. *)
-
-(*   From ASUB Require Import SigAnalyzer ErrorM. *)
-
-(*   Definition stlc_sig := *)
-(*     match ErrorM.run (translate_signature stlc) tt tt with *)
-(*     | inl _ => Hsig_example.mySig *)
-(*     | inr (_, _, sig) => sig *)
-(*     end. *)
-
-(*   Compute stlc_sig. *)
-(*   Definition stlcinfo := {| in_flags := {| fl_scope_type := Unscoped |}; *)
-(*                             in_implicits := SFMap.empty; *)
-(*                             in_sig := stlc_sig; *)
-(*                             in_env := initial_env |}. *)
-(* End stlc. *)
-(* Import stlc. *)
-
-(* Module GenUpsExample_stlc. *)
-(*   Import GenM.Notations GenM. *)
-
-(*   Definition upList_tm := *)
-(*     let m := substSorts <- substOf "tm";; *)
-(*              let '(_, upList) := getUps substSorts [] in *)
-(*              pure upList in *)
-(*     match GenM.run m {| R_flags := stlcinfo.(in_flags); R_sig := stlcinfo.(in_sig); R_env := stlcinfo.(in_env) |} (initial_state stlcinfo.(in_implicits)) with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-
-(*   Compute upList_tm. *)
-(* End GenUpsExample_stlc. *)
-(* Import GenUpsExample_stlc. *)
-
-(* Module pi. *)
-(*   From ASUB Require Import CustomEntryParser. *)
-(*   Import SyntaxNotation SyntaxTranslation Syntax. *)
-
-(* Definition pi : autosubstLanguage := *)
-(*   {| al_sorts := <{ chan : Type; *)
-(*                     proc : Type }>; *)
-(*      al_ctors := {{ Nil : proc; *)
-(*                     Bang : proc -> proc; *)
-(*                     Res : (bind chan in proc) -> proc; *)
-(*                     Par : proc -> proc -> proc; *)
-(*                     In : chan -> (bind chan in proc) -> proc; *)
-(*                     Out : chan -> chan -> proc -> proc }} |}. *)
-
-(*   From ASUB Require Import SigAnalyzer ErrorM. *)
-
-(*   MetaCoq Run (translate_signature pi >>= tmDefinition "pi_sig"). *)
-(*   Compute pi_sig. *)
-
-(*   Definition piinfo := {| in_flags := {| fl_scope_type := Wellscoped |}; *)
-(*                             in_implicits := SFMap.empty; *)
-(*                             in_sig := pi_sig; *)
-(*                             in_env := initial_env |}. *)
-(* End pi. *)
-(* Import pi. *)
-
-(* Module GenUpsExample_pi. *)
-(*   Import GenM.Notations GenM. *)
-
-(*   Definition upList_chan := *)
-(*     let m := substSorts <- substOf "chan";; *)
-(*              let '(_, upList) := getUps substSorts [] in *)
-(*              pure upList in *)
-(*     match GenM.runInfo m piinfo with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-(*   Compute upList_chan. *)
-
-(*   Definition upList_proc := *)
-(*     let m := substSortsChan <- substOf "chan";; *)
-(*              substSorts <- substOf "proc";; *)
-(*              let '(combinations, _) := getUps substSortsChan [] in *)
-(*              let '(_, upList) := getUps substSorts combinations in *)
-(*              pure upList in *)
-(*     match GenM.runInfo m piinfo with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-(*   Compute upList_proc. *)
-
-(* End GenUpsExample_pi. *)
-(* Import GenUpsExample_pi. *)
-
-(* Module fol. *)
-(*   From ASUB Require Import CustomEntryParser. *)
-(*   Import SyntaxNotation SyntaxTranslation Syntax. *)
-
-(* Definition fol : autosubstLanguage := *)
-(*   {| al_sorts := <{ folterm : Type; *)
-(*                     form : Type }>; *)
-(*      al_ctors := {{ Func (f : nat) : codF (fin f) (folterm) -> folterm; *)
-(*                     Fal : form; *)
-(*                     Pred (p : nat) : codF (fin p) (folterm) -> form; *)
-(*                     Impl : form -> form -> form; *)
-(*                     Conj : form -> form -> form; *)
-(*                     Disj : form -> form -> form; *)
-(*                     All : (bind folterm in form) -> form; *)
-(*                     Ex : (bind folterm in form) -> form }} |}. *)
-
-(*   From ASUB Require Import SigAnalyzer. *)
-
-(*   MetaCoq Run (translate_signature fol >>= tmDefinition "fol_sig"). *)
-
-(*   Compute fol_sig. *)
-(*   Definition fol_info := {| in_flags := {| fl_scope_type := Wellscoped |}; *)
-(*                             in_implicits := SFMap.empty; *)
-(*                             in_sig := fol_sig; *)
-(*                             in_env := initial_env |}. *)
-(* End fol. *)
-(* Import fol. *)
-
-(* Module GenUpsExample_fol. *)
-(*   Import GenM.Notations GenM. *)
-
-(*   Definition upList_term := *)
-(*     let m := substSorts <- substOf "folterm";; *)
-(*              let '(_, upList) := getUps substSorts [] in *)
-(*              pure upList in *)
-(*     match GenM.runInfo m fol_info with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-(*   Compute upList_term. *)
-
-(*   Definition upList_form := *)
-(*     let m := substSortsTerm <- substOf "folterm";; *)
-(*              substSorts <- substOf "form";; *)
-(*              let '(combinations, _) := getUps substSortsTerm [] in *)
-(*              let '(_, upList) := getUps substSorts combinations in *)
-(*              pure upList in *)
-(*     match GenM.runInfo m fol_info with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-(*   Compute upList_form. *)
-
-(* End GenUpsExample_fol. *)
-(* Import GenUpsExample_fol. *)
-
-(* Module variadic. *)
-  
-(*   From ASUB Require Import CustomEntryParser SigAnalyzer. *)
-(*   Import SyntaxNotation SyntaxTranslation Syntax. *)
-
-(* Definition variadic : autosubstLanguage := *)
-(*   {| al_sorts := <{ tm : Type  }>; *)
-(*      al_ctors := {{ app : tm -> listF (tm) -> tm; *)
-(*                     lam (p: nat) : (bind <p, tm> in tm) -> tm }} |}. *)
-
-(*   MetaCoq Run (translate_signature variadic >>= tmDefinition "variadic_sig"). *)
-
-(*   Compute variadic_sig. *)
-(*   Definition variadic_info := {| in_flags := {| fl_scope_type := Wellscoped |}; *)
-(*                                  in_implicits := SFMap.empty; *)
-(*                                  in_sig := variadic_sig; *)
-(*                                  in_env := initial_env |}. *)
-(* End variadic. *)
-(* Import variadic. *)
-
-(* Module GenUpsExample_variadic. *)
-(*   Import GenM.Notations GenM. *)
-
-(*   Definition upList_tm := *)
-(*     let m := substSorts <- substOf "tm";; *)
-(*              let '(_, upList) := getUps substSorts [] in *)
-(*              pure upList in *)
-(*     match GenM.runInfo m variadic_info with *)
-(*     | inr (_, _, x) => x *)
-(*     | _ => [] *)
-(*     end. *)
-(*   Compute upList_tm. *)
-
-(* End GenUpsExample_variadic. *)
-(* Import GenUpsExample_variadic. *)
-
 Module TemplateMonadInterface.
 
   (** * TemplateMonad function to generate and unquote inductive types.
    ** * It returns an updated environment that contains the new types and their constructors. *)
   Definition mkInductive (m: GenM.t mutual_inductive_entry) (info : genInfo) : TemplateMonad@{_ Set} genInfo :=
-    let flags := info.(in_flags) in
-    let sig := info.(in_sig) in
-    let env := info.(in_env) in
-    match GenM.run m {| R_flags := flags; R_sig := sig; R_env := env |} (initial_state info.(in_implicits)) with
+    match GenM.runInfo m info with
     | inl e => tmFail e
     | inr (_, {| st_names := names; st_implicits := implicits |}, mind) =>
       mind_eval <- tmEval TemplateMonad.Common.all mind;;
       tmMkInductive mind_eval;;
-      env' <- tm_update_env names env;;
+      env' <- tm_update_env names info.(in_env);;
       tmReturn {| in_env := env';
                   in_implicits := implicits;
-                  in_flags := flags;
-                  in_sig := sig |}
+                  in_flags := info.(in_flags);
+                  in_sig := info.(in_sig);
+                  in_modpath := info.(in_modpath) |}
     end.
   
-  Definition mkLemmasTyped (m: GenM.t (list lemma)) (info: genInfo) : TemplateMonad@{_ Set} genInfo :=
-    let flags := info.(in_flags) in
-    let sig := info.(in_sig) in
-    let env := info.(in_env) in
-    match GenM.run m {| R_flags := flags; R_sig := sig; R_env := env |} (initial_state info.(in_implicits)) with
+  Definition mkLemmasTyped (m: GenM.t (list nlemma)) (info: genInfo) : TemplateMonad@{_ Set} genInfo :=
+    match GenM.runInfo (GenM.bind m (fun ls => GenM.sequence (List.map translate_lemma ls))) info with
     | inl e => tmFail e
     | inr (_, {| st_names := names; st_implicits := implicits |}, lemmas) =>
+      
       lemmas_eval <- tmEval TemplateMonad.Common.all lemmas;;
       monad_map tmTypedDefinition lemmas_eval;; 
-      env' <- tm_update_env names env;;
+      env' <- tm_update_env names info.(in_env);;
       let new_info := {| in_env := env';
                          in_implicits := implicits;
-                         in_flags := flags;
-                         in_sig := sig |} in
+                         in_flags := info.(in_flags);
+                         in_sig := info.(in_sig);
+                         in_modpath := info.(in_modpath) |} in
       new_info_eval <- tmEval TemplateMonad.Common.all new_info;;
       tmReturn new_info_eval
     end. 
@@ -300,12 +50,6 @@ Module TemplateMonadInterface.
     info <- tmEval TemplateMonad.Common.all info;;
     tmDefinition infoName info;;
     tmReturn tt.
-
-  Definition tm_liftGenM {A} (m: GenM.t A) (info: genInfo) : @TemplateMonad@{_ Set} A :=
-    match GenM.run m {| R_flags := info.(in_flags); R_sig := info.(in_sig); R_env := info.(in_env) |} (initial_state info.(in_implicits)) with
-    | inl e => tmFail e
-    | inr (_, _, a) => tmReturn a
-    end.
 
 End TemplateMonadInterface.
 Import TemplateMonadInterface.
@@ -413,187 +157,6 @@ Module inductives.
 End inductives.
 Import inductives.
 
-Definition default_flags := {| fl_scope_type := Wellscoped |}.
-MetaCoq Run (mkInductive (genMutualInductive ("ty", [])) {| in_env := GenM.initial_env; in_implicits := SFMap.empty; in_flags := default_flags; in_sig := Hsig_example.mySig |}
-                         >>= tmEval TemplateMonad.Common.all
-                         >>= mkInductive (genMutualInductive ("tm", ["vl"]))
-                         >>= composeGeneration "env0").
-
-(** * stlc *)
-(* MetaCoq Run (mkInductive (genMutualInductive ("ty", [])) stlcinfo *)
-(*                          >>= tmEval TemplateMonad.Common.all *)
-(*                          >>= mkInductive (genMutualInductive ("tm", []))  *)
-(*                          >>= composeGeneration "env0"). *)
-
-(** * pi *)
-(* MetaCoq Run (mkInductive (genMutualInductive ("chan", [])) piinfo *)
-(*                          >>= tmEval TemplateMonad.Common.all *)
-(*                          >>= mkInductive (genMutualInductive ("proc", [])) *)
-(*                          >>= composeGeneration "env0"). *)
-
-(** * fol *)
-(* From ASUB Require Import fintype core. *)
-(* Inductive folterm (n_term : nat) : Type := *)
-(*   | var_folterm : fin n_term -> folterm n_term *)
-(*   | Func : forall f : nat, cod (fin f) (folterm n_term) -> folterm n_term. *)
-(* Inductive form (n_term : nat) : Type := *)
-(*   | Fal : form n_term *)
-(*   | Pred : forall p : nat, cod (fin p) (folterm n_term) -> form n_term *)
-(*   | Impl : form n_term -> form n_term -> form n_term *)
-(*   | Conj : form n_term -> form n_term -> form n_term *)
-(*   | Disj : form n_term -> form n_term -> form n_term *)
-(*   | All : form (S n_term) -> form n_term *)
-(*   | Ex : form (S n_term) -> form n_term. *)
-
-(* MetaCoq Run (locate_mind "term" >>= tmPrint). *)
-
-(* Definition myterm := *)
-(* {| *)
-(*   mind_entry_record := None; *)
-(*   mind_entry_finite := Finite; *)
-(*   mind_entry_params := *)
-(*     [{| *)
-(*        decl_name := {| binder_name := nNamed "n_term"; binder_relevance := Relevant |}; *)
-(*        decl_body := None; *)
-(*        decl_type := *)
-(*          tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} [] *)
-(*      |}]; *)
-(*   mind_entry_inds := *)
-(*     [{| *)
-(*        mind_entry_typename := "term"; *)
-(*        mind_entry_arity := *)
-(*          tSort *)
-(*            {| *)
-(*              Universe.t_set := *)
-(*                {| *)
-(*                  UnivExprSet.this := *)
-(*                    [(Level.lSet, 0); (Level.Level "ASUB.src.static.fintype.1", 0); *)
-(*                    (Level.Level "ASUB.src.static.core.101", 0)]; *)
-(*                  UnivExprSet.is_ok := *)
-(*                    UnivExprSet.Raw.add_ok (s:=[(Level.lSet, 0); (Level.Level "ASUB.src.static.fintype.1", 0)]) *)
-(*                      (Level.Level "ASUB.src.static.core.101", 0) *)
-(*                      (UnivExprSet.Raw.add_ok (s:=[(Level.lSet, 0)]) *)
-(*                         (Level.Level "ASUB.src.static.fintype.1", 0) *)
-(*                         (UnivExprSet.Raw.singleton_ok (Level.lSet, 0))) *)
-(*                |}; *)
-(*              Universe.t_ne := *)
-(*                Universes.Universe.add_obligation_1 (Level.Level "ASUB.src.static.core.101", 0) *)
-(*                  {| *)
-(*                    Universe.t_set := *)
-(*                      {| *)
-(*                        UnivExprSet.this := [(Level.lSet, 0); (Level.Level "ASUB.src.static.fintype.1", 0)]; *)
-(*                        UnivExprSet.is_ok := *)
-(*                          UnivExprSet.Raw.add_ok (s:=[(Level.lSet, 0)]) *)
-(*                            (Level.Level "ASUB.src.static.fintype.1", 0) *)
-(*                            (UnivExprSet.Raw.singleton_ok (Level.lSet, 0)) *)
-(*                      |}; *)
-(*                    Universe.t_ne := *)
-(*                      Universes.Universe.add_obligation_1 (Level.Level "ASUB.src.static.fintype.1", 0) *)
-(*                        {| *)
-(*                          Universe.t_set := *)
-(*                            {| *)
-(*                              UnivExprSet.this := [(Level.lSet, 0)]; *)
-(*                              UnivExprSet.is_ok := UnivExprSet.Raw.singleton_ok (Level.lSet, 0) *)
-(*                            |}; *)
-(*                          Universe.t_ne := eq_refl *)
-(*                        |} *)
-(*                  |} *)
-(*            |}; *)
-(*        mind_entry_consnames := ["var_term"; "Func"]; *)
-(*        mind_entry_lc := *)
-(*          [tProd {| binder_name := nAnon; binder_relevance := Relevant |} *)
-(*             (tApp (tConst (MPfile ["fintype"; "static"; "src"; "ASUB"], "fin") []) [tRel 0]) *)
-(*             (tApp (tRel 2) [tRel 1]); *)
-(*          tProd {| binder_name := nNamed "f"; binder_relevance := Relevant |} *)
-(*            (tInd {| inductive_mind := (MPfile ["Datatypes"; "Init"; "Coq"], "nat"); inductive_ind := 0 |} []) *)
-(*            (tProd {| binder_name := nAnon; binder_relevance := Relevant |} *)
-(*               (tApp (tConst (MPfile ["core"; "static"; "src"; "ASUB"], "cod") []) *)
-(*                  [tApp (tConst (MPfile ["fintype"; "static"; "src"; "ASUB"], "fin") []) [tRel 0]; *)
-(*                  tApp (tRel 2) [tRel 1]]) (tApp (tRel 3) [tRel 2]))] *)
-(*      |}]; *)
-(*   mind_entry_universes :=(* Monomorphic_entry (LevelSet.empty, ConstraintSet.empty); *) *)
-(*     Monomorphic_entry *)
-(*       ({| VSet.this := []; VSet.is_ok := LevelSet.Raw.empty_ok |}, *)
-(*       {| *)
-(*         CS.this := *)
-(*           [(Level.lSet, ConstraintType.Le BinNums.Z0, Level.Level "ASUB.src.static.core.103"); *)
-(*           (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*           Level.Level "ASUB.src.static.core.102"); *)
-(*           (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*           Level.Level "ASUB.src.static.core.103"); *)
-(*           (Level.Level "ASUB.src.static.core.101", ConstraintType.Le BinNums.Z0, *)
-(*           Level.Level "ASUB.src.static.core.103")]; *)
-(*         CS.is_ok := *)
-(*           ConstraintSet.Raw.add_ok *)
-(*             (s:=[(Level.lSet, ConstraintType.Le BinNums.Z0, Level.Level "ASUB.src.static.core.103"); *)
-(*                 (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*                 Level.Level "ASUB.src.static.core.102"); *)
-(*                 (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*                 Level.Level "ASUB.src.static.core.103")]) *)
-(*             (Level.Level "ASUB.src.static.core.101", ConstraintType.Le BinNums.Z0, *)
-(*             Level.Level "ASUB.src.static.core.103") *)
-(*             (ConstraintSet.Raw.add_ok *)
-(*                (s:=[(Level.lSet, ConstraintType.Le BinNums.Z0, Level.Level "ASUB.src.static.core.103"); *)
-(*                    (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*                    Level.Level "ASUB.src.static.core.102")]) *)
-(*                (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*                Level.Level "ASUB.src.static.core.103") *)
-(*                (ConstraintSet.Raw.add_ok *)
-(*                   (s:=[(Level.lSet, ConstraintType.Le BinNums.Z0, Level.Level "ASUB.src.static.core.103")]) *)
-(*                   (Level.Level "ASUB.src.static.fintype.1", ConstraintType.Le BinNums.Z0, *)
-(*                   Level.Level "ASUB.src.static.core.102") *)
-(*                   (ConstraintSet.Raw.add_ok (s:=[]) *)
-(*                      (Level.lSet, ConstraintType.Le BinNums.Z0, Level.Level "ASUB.src.static.core.103") *)
-(*                      ConstraintSet.Raw.empty_ok))) *)
-(*       |}); *)
-(*   mind_entry_template := false; *)
-(*   mind_entry_variance := None; *)
-(*   mind_entry_private := None *)
-(* |}. *)
-
-(* Print mutual_inductive_entry. *)
-(* Search universes_entry. *)
-(* Search ContextSet.t. *)
-(* (* TemplateLookup.monomorphic_udecl_decl: TemplateEnvironment.global_decl -> ContextSet.t *) *)
-(* Search global_decl. *)
-(* Search constant_body. *)
-(* (* tmQuoteConstant *) *)
-
-
-(* Definition locate_kername (name: string) : TemplateMonad@{_ Set} kername := *)
-(*   loc <- tmLocate1 name;; *)
-(*   match loc with *)
-(*   | ConstRef kn => tmReturn kn *)
-(*   | _ => tmFail (String.append "unknown name or name is not an inductive/constructor/constant: " name) *)
-(*   end. *)
-(* From ASUB Require Import fintype core. *)
-
-(* MetaCoq Run (locate_kername "fin" >>= fun kn => tmQuoteConstant kn true >>= tmDefinition "finbody" >>= fun body => tmDefinition "findecl" (ConstantDecl body) >>= fun decl => tmDefinition "finctx" (monomorphic_udecl_decl decl) >>= fun ctx => tmDefinition "finuniv" (Monomorphic_entry ctx)). *)
-(* MetaCoq Run (locate_kername "cod" >>= fun kn => tmQuoteConstant kn true >>= tmEval all >>= tmDefinition "codbody"). *)
-
-(* MetaCoq Run (tmQuoteRecTransp fin true >>= tmEval all >>= tmPrint). *)
-
-      
-(* MetaCoq Run (tmMkInductive myterm). *)
-
-
-(* MetaCoq Run (mkInductive (genMutualInductive ("term", [])) fol_info *)
-(*                          >>= tmEval TemplateMonad.Common.all *)
-(*                          >>= mkInductive (genMutualInductive ("form", [])) *)
-(*                          >>= composeGeneration "env0"). *)
-
-(** * variadic *)
-(* DONE in app constructor the arguments seem to be swapped
- was because I reverse the positions in the parser *)
-(* DONE and in lam constructor a apparently applies S and not plus
- was because I parsed everything as a Single *)
-
-(* Compute (GenM.runInfo (genMutualInductive ("tm", [])) variadic_info). *)
-
-(* also universe constraint errors *)
-(* MetaCoq Run (mkInductive (genMutualInductive ("tm", [])) variadic_info *)
-(*                          >>= composeGeneration "env0"). *)
-
 
 Module congruences.
   Import GenM GenM.Notations.
@@ -642,46 +205,12 @@ Module congruences.
 
 
   (** * generates the terms for the congruence lemmas of the constructors of an inductive type *)
-  Definition genCongruences (sort: tId) : t (list lemma) :=
+  Definition genCongruences (sort: tId) : t (list nlemma) :=
     ctors <- constructors sort;;
-    a_map (fun ctor => translate_lemma (genCongruence sort ctor)) ctors.
+    a_map (genCongruence sort) ctors.
 End congruences.
 Import congruences.
 
-MetaCoq Run (mkLemmasTyped (genCongruences "ty") env0
-                           >>= tmEval TemplateMonad.Common.all
-                           >>= mkLemmasTyped (genCongruences "tm")
-                           >>= tmEval TemplateMonad.Common.all
-                           >>= mkLemmasTyped (genCongruences "vl")
-                           >>= composeGeneration "env1").
-
-(** * stlc *)
-(* MetaCoq Run (mkLemmasTyped (genCongruences "ty") env0 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genCongruences "tm")  *)
-(*                            >>= composeGeneration "env1"). *)
-
-(** * pi *)
-(* MetaCoq Run (mkLemmasTyped (genCongruences "chan") env0 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genCongruences "proc") *)
-(*                            >>= composeGeneration "env1"). *)
-
-(** * fol *)
-(* we had to write the inductive types so we put them into the environment explicitly *)
-
-
-(* MetaCoq Run (env <- tm_update_env ["folterm"; "var_folterm"; "Func"; "form"; "Fal"; "Pred"; "Impl"; "Conj"; "Disj"; "All"; "Ex"] initial_env;; *)
-(*              let info := {| in_flags := {| fl_scope_type := Wellscoped |}; *)
-(*                             in_implicits := SFMap.empty; *)
-(*                             in_sig := fol_sig; *)
-(*                             in_env := env |} in *)
-(*              info <- tmEval all info;; *)
-(*              tmDefinition "env0" info). *)
-(* MetaCoq Run (mkLemmasTyped (genCongruences "folterm") env0 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genCongruences "form") *)
-(*                            >>= composeGeneration "env1"). *)
 
 Module traversal.
   Import GenM.Notations GenM.
@@ -806,11 +335,10 @@ Module renamings.
     let name := upRenName sort binder in
     process_lemma name (List.concat [bpms; bm; bn; [bxi]]) innerType innerProof.
 
-  Definition genUpRens (bss: list (Binder * tId)) : t (list (string * term * term)) :=
-    a_map (fun bs => translate_lemma (genUpRen bs)) bss.
+  Definition genUpRens (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpRen bss.
 
 
-  (* TODO fcbv hangs here atm *)
   Definition genRenaming (sort: tId) : t (def nterm) :=
     '(ms, bms) <- introScopeVar "m" sort;;
     '(ns, bns) <- introScopeVar "n" sort;;
@@ -827,17 +355,6 @@ Module renamings.
   Definition genRenamings := genFixpoint genRenaming.
 End renamings.
 Import renamings.
-
-
-MetaCoq Run (mkLemmasTyped (genUpRens upList_ty) env1 >>= composeGeneration "env2").
-MetaCoq Run (mkLemmasTyped (genRenamings ("ty", [])) env2 >>= composeGeneration "env3").
-MetaCoq Run (mkLemmasTyped (genUpRens upList_tm) env3 >>= composeGeneration "env4").
-MetaCoq Run (mkLemmasTyped (genRenamings ("tm", ["vl"])) env4 >>= composeGeneration "env5").
-
-(** * stlc *)
-(* MetaCoq Run (mkLemmasTyped (genUpRens upList_tm) env1 >>= composeGeneration "env4"). *)
-(* MetaCoq Run (mkLemmasTyped (genRenamings ("tm", [])) env4 >>= composeGeneration "env5"). *)
-
 
 
 Module substitutions.
@@ -858,8 +375,8 @@ Module substitutions.
     let name := upName sort binder in
     process_lemma name (List.concat [bpms; bm; bns; [ bsigma ]]) innerType innerProof.
 
-  Definition genUpSubsts (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpSubst bs)) bss.
+  Definition genUpSubsts (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpSubst bss.
 
   (** Generate the substitution function
    ** e.g. subst_ty *)
@@ -880,22 +397,6 @@ Module substitutions.
 End substitutions.
 Import substitutions.
 
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_ty) env5 >>= composeGeneration "env6"). *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("ty", [])) env6 >>= composeGeneration "env7"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_tm) env7 >>= composeGeneration "env8"). *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("tm", ["vl"])) env8 >>= composeGeneration "env9"). *)
-
-(** * pi *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("chan", [])) env1 >>= composeGeneration "env5"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_chan) env5 >>= composeGeneration "env6"). *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("proc", [])) env6 >>= composeGeneration "env7"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_proc) env7 >>= composeGeneration "env8"). *)
-
-(** * fol *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("folterm", [])) env1 >>= composeGeneration "env5"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_term) env5 >>= composeGeneration "env6"). *)
-(* MetaCoq Run (mkLemmasTyped (genSubstitutions ("form", [])) env6 >>= composeGeneration "env7"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubsts upList_form) env7 >>= composeGeneration "env8"). *)
 
 Module idsubsts.
   Import GenM.Notations GenM.
@@ -943,8 +444,8 @@ Module idsubsts.
     let name := upIdName sort binder in
     process_lemma name (List.concat [bpms; bms; [ bsigma; beq; bx ]]) innerType innerBody.
   
-  Definition genUpIds (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpId bs)) bss.
+  Definition genUpIds (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpId bss.
 
   Definition genIdLemma (sort: tId) : t (def nterm) :=
     '(ms, bms) <- introScopeVar "m" sort;;
@@ -967,22 +468,6 @@ Module idsubsts.
 End idsubsts.
 Import idsubsts.
 
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_ty) env9 >>= composeGeneration "env10"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("ty", [])) env10 >>= composeGeneration "env11"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_tm) env11 >>= composeGeneration "env12"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("tm", ["vl"])) env12 >>= composeGeneration "env13"). *)
-
-(** * pi *)
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_chan) env8 >>= composeGeneration "env10"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("chan", [])) env10 >>= composeGeneration "env11"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_proc) env11 >>= composeGeneration "env12"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("proc", [])) env12 >>= composeGeneration "env13"). *)
-
-(** * fol *)
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_term) env8 >>= composeGeneration "env10"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("folterm", [])) env10 >>= composeGeneration "env11"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpIds upList_form) env11 >>= composeGeneration "env12"). *)
-(* MetaCoq Run (mkLemmasTyped (genIdLemmas ("form", [])) env12 >>= composeGeneration "env13"). *)
 
 Module extensionality.
   Import GenM.Notations GenM.
@@ -1023,8 +508,8 @@ Module extensionality.
     let name := upExtRenName sort binder in
     process_lemma name (List.concat [bpms; bms; bns; [bxi; bzeta; beq; bx ]]) innerType innerBody.
   
-  Definition genUpExtRens (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpExtRen bs)) bss.
+  Definition genUpExtRens (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpExtRen bss.
 
   
   Definition genExtRen (sort: tId) : t (def nterm) :=
@@ -1045,13 +530,10 @@ Module extensionality.
               sem_default
               functorExt_.
 
-  Definition genExtRens (component: NEList.t tId) : t (list lemma) :=
-    let componentL := NEList.to_list component in
-    isRec <- isRecursive component;;
-    fexprs <- a_map genExtRen componentL;;
-    buildFixpoint fexprs isRec.
-
+  Definition genExtRens (component: NEList.t tId) : t (list nlemma) :=
+    genFixpoint genExtRen component.
   
+
   Definition genUpExt (bs: Binder * tId) : t nlemma :=
     let '(binder, sort) := bs in
     let '(pms, bpms) := binvparameters binder in
@@ -1082,8 +564,8 @@ Module extensionality.
     let name := upExtName sort binder in
     process_lemma name (List.concat [bpms; bms; bns; [ bsigma; btau; beq; bx ]]) innerType innerBody.
     
-  Definition genUpExts (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpExt bs)) bss.
+  Definition genUpExts (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpExt bss.
 
   Definition genExt (sort: tId) : t (def nterm) :=
     '(ms, bms) <- introScopeVar "m" sort;;
@@ -1106,50 +588,6 @@ Module extensionality.
 End extensionality.
 Import extensionality.
 
-(* MetaCoq Run (mkLemmasTyped (genUpExtRens upList_ty) env13 *)
-(*                            >>= tmEval TemplateMonad.Common.all >>= *)
-(*                            mkLemmasTyped (genUpExts upList_ty)  *)
-(*                            >>= composeGeneration "env14"). *)
-
-(* MetaCoq Run (mkLemmasTyped (genUpExtRens upList_tm) env14 *)
-(*                            >>= tmEval TemplateMonad.Common.all >>= *)
-(*                            mkLemmasTyped (genUpExts upList_tm)  *)
-(*                            >>= composeGeneration "env15"). *)
-
-(* MetaCoq Run (mkLemmasTyped (genExtRens ("ty", [])) env15 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genExts ("ty", []))  *)
-(*                            >>= composeGeneration "env16"). *)
-
-(* MetaCoq Run (mkLemmasTyped (genExtRens ("tm", ["vl"])) env16 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genExts ("tm", ["vl"]))  *)
-(*                            >>= composeGeneration "env17"). *)
-
-
-(** * pi *)
-
-(* MetaCoq Run (mkLemmasTyped (genUpExts upList_chan) env13 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genUpExts upList_proc) *)
-(*                            >>= composeGeneration "env14"). *)
-
-(* MetaCoq Run (mkLemmasTyped (genExts ("chan", [])) env14 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genExts ("proc", [])) *)
-(*                            >>= composeGeneration "env17"). *)
-
-(* fol *)
-
-(* MetaCoq Run (mkLemmasTyped (genUpExts upList_term) env13 *)
-(*                            >>= tmEval TemplateMonad.Common.all  *)
-(*                            >>= mkLemmasTyped (genUpExts upList_form)  *)
-(*                            >>= composeGeneration "env14"). *)
-
-(* MetaCoq Run (mkLemmasTyped (genExts ("folterm", [])) env14 *)
-(*                            >>= tmEval TemplateMonad.Common.all *)
-(*                            >>= mkLemmasTyped (genExts ("form", [])) *)
-(*                            >>= composeGeneration "env17"). *)
 
 Module renRen.
   Import GenM.Notations GenM.
@@ -1184,8 +622,8 @@ Module renRen.
     let name := upRenRenName sort binder in
     process_lemma name (List.concat [bpms; bks; bls; bms; [bxi; bzeta; brho; beq; bx]]) innerType innerBody.
 
-  Definition genUpRenRens (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpRenRen bs)) bss.
+  Definition genUpRenRens (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpRenRen bss.
 
 
   Definition genCompRenRen (sort: tId) : t (def nterm) :=
@@ -1224,10 +662,6 @@ Module renRen.
 End renRen.
 Import renRen.
 
-(* MetaCoq Run (mkLemmasTyped (genUpRenRens upList_ty) env17 >>= composeGeneration "env18"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpRenRens upList_tm) env18 >>= composeGeneration "env19"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompRenRens ("ty", [])) env19 >>= composeGeneration "env20"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompRenRens ("tm", ["vl"])) env20 >>= composeGeneration "env21"). *)
 
 Module renSubst.
   Import GenM.Notations GenM.
@@ -1267,8 +701,8 @@ Module renSubst.
     let name := upRenSubstName sort binder in
     process_lemma name (List.concat [bpms; bks; bls; bms; [bxi; btau; btheta; beq; bx]]) innerType innerBody.
 
-  Definition genUpRenSubsts (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpRenSubst bs)) bss.
+  Definition genUpRenSubsts (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpRenSubst bss.
   
   Definition genCompRenSubst (sort: tId) : t (def nterm) :=
     '(ks, bks) <- introScopeVar "k" sort;;
@@ -1296,24 +730,7 @@ Module renSubst.
 End renSubst.
 Import renSubst.
 
-(* MetaCoq Run (mkLemmasTyped (genUpRenSubsts upList_ty) env21 >>= composeGeneration "env22"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpRenSubsts upList_tm) env22 >>= composeGeneration "env23"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompRenSubsts ("ty", [])) env23 >>= composeGeneration "env24"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompRenSubsts ("tm", ["vl"])) env24 >>= composeGeneration "env25"). *)
 
-(* From ASUB Require Import core. *)
-
-(* Lemma up_ren_subst'_ty_ty (xi : nat -> nat) (tau : nat -> ty) *)
-(*   (theta : nat -> ty) (Eq : forall x, funcomp tau xi x = theta x) : *)
-(*   forall x, funcomp (up_ty_ty tau) (upRen_ty_ty xi) x = up_ty_ty theta x. *)
-(* Proof. *)
-(* exact (up_ren_subst_ty_ty xi tau theta Eq). *)
-(* Qed. *)
-
-(* MetaCoq Run (tm_update_env {| st_names := ["up_ren_subst'_ty_ty"] |} env22 >>= tmDefinition "env22'"). *)
-
-(* DONE the type of up_ren_subst_ty_ty is evaluated too much so this fails. If I define a lemma with the correct type I can use the same proof (see above) and then it works.
- * It worked when I used the hnf reduction strategy in my unquoteTyped helper function *)
 Module substRen.
   Import GenM.Notations GenM.
   
@@ -1378,8 +795,8 @@ Module substRen.
     let name := upSubstRenName sort binder in
     process_lemma name (List.concat [bpms; bks; bls; bms; [bsigma]; bzetas; [btheta]; [beq]; [bx]]) innerType innerBody.
 
-  Definition genUpSubstRens (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpSubstRen bs)) bss.
+  Definition genUpSubstRens (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpSubstRen bss.
 
   
   Definition genCompSubstRen (sort: tId) : t (def nterm) :=
@@ -1413,10 +830,6 @@ Module substRen.
 End substRen.
 Import substRen.
 
-(* MetaCoq Run (mkLemmasTyped (genUpSubstRens upList_ty) env25 >>= composeGeneration "env26"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubstRens upList_tm) env26 >>= composeGeneration "env27"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstRens ("ty", [])) env27 >>= composeGeneration "env28"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstRens ("tm", ["vl"])) env28 >>= composeGeneration "env29"). *)
 
 Module substSubst.
   Import GenM.Notations GenM.
@@ -1488,8 +901,8 @@ Module substSubst.
     let name := upSubstSubstName sort binder in
     process_lemma name (List.concat [bpms; bks; bls; bms; [bsigma]; btaus; [btheta; beq; bx]]) innerType innerBody.
 
-  Definition genUpSubstSubsts (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpSubstSubst bs)) bss.
+  Definition genUpSubstSubsts (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpSubstSubst bss.
 
 
   Definition genUpSubstSubstNoRen (bs: Binder * tId) : t nlemma :=
@@ -1558,8 +971,8 @@ Module substSubst.
     let name := upSubstSubstName sort binder in
     process_lemma name (List.concat [bpms; bks; bls; bms; [bsigma]; btaus; [btheta; beq; bx]]) innerType innerBody.
 
-  Definition genUpSubstSubstsNoRen (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpSubstSubstNoRen bs)) bss.
+  Definition genUpSubstSubstsNoRen (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpSubstSubstNoRen bss.
 
 
   Definition genCompSubstSubst (sort: tId) : t (def nterm) :=
@@ -1593,38 +1006,6 @@ Module substSubst.
 End substSubst.
 Import substSubst.
 
-(* MetaCoq Run (mkLemmasTyped (genUpSubstSubsts upList_ty) env29 >>= composeGeneration "env30"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubstSubsts upList_tm) env30 >>= composeGeneration "env31"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("ty", [])) env31 >>= composeGeneration "env32"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("tm", ["vl"])) env32 >>= composeGeneration "env33"). *)
-
-(** * pi *)
-
-(* Module m. *)
-(*   Import GenM.Notations GenM. *)
-  
-(*   Definition testup : GenM.t substTy := *)
-(*         let bs := (BinderList "p" "chan", "chan") in *)
-(*         let '(binder, sort) := bs in *)
-(*         '(ms, bms) <- introScopeVar "m" sort;; *)
-(*         '(ls, bls) <- introScopeVar "l" sort;; *)
-(*         '(taus, btaus) <- genSubst "tau" sort ls ms;; *)
-(*         taus_up <- upSubst sort [binder] taus;; *)
-(*         pure taus_up. *)
-(* End m. *)
-
-(* MetaCoq Run ( *)
-(*       match GenM.runInfo m.testup env17 with *)
-(*       | inl e => tmFail e *)
-(*       | inr (_, _, x) => *)
-(*         x <- tmEval all x;; *)
-(*         tmPrint x *)
-(*       end). *)
-(* From ASUB Require Import core fintype. *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("chan", [])) env17 >>= composeGeneration "env32"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubstSubstsNoRen upList_chan) env32 >>= composeGeneration "env30"). *)
-(* MetaCoq Run (mkLemmasTyped (genCompSubstSubsts ("proc", [])) env30 >>= composeGeneration "env33"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpSubstSubstsNoRen upList_proc) env33 >>= composeGeneration "env31"). *)
 
 Module rinstInst.
   Import GenM.Notations GenM.
@@ -1663,8 +1044,8 @@ Module rinstInst.
     let name := upRinstInstName sort binder in
     process_lemma name (List.concat [bpms; bms; bns; [bxi; bsigma; beq; bx]]) innerType innerBody.
     
-  Definition genUpRinstInsts (bss: list (Binder * tId)) : t (list lemma) :=
-    a_map (fun bs => translate_lemma (genUpRinstInst bs)) bss.
+  Definition genUpRinstInsts (bss: list (Binder * tId)) : t (list nlemma) :=
+    a_map genUpRinstInst bss.
 
 
   Definition genRinstInst (sort: tId) : t (def nterm) :=
@@ -1707,18 +1088,12 @@ Module rinstInst.
     let name := rinstInstRewriteName sort in
     process_lemma name (List.concat [bms; bns; bxis; [bx]]) innerType innerBody.
                 
-  Definition genLemmaRinstInsts (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaRinstInst sort)) sorts.
+  Definition genLemmaRinstInsts (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaRinstInst sorts.
 
 End rinstInst.
 Import rinstInst.
 
-(* MetaCoq Run (mkLemmasTyped (genUpRinstInsts upList_ty) env33 >>= composeGeneration "env34"). *)
-(* MetaCoq Run (mkLemmasTyped (genUpRinstInsts upList_tm) env34 >>= composeGeneration "env35"). *)
-(* MetaCoq Run (mkLemmasTyped (genRinstInsts ("ty", [])) env35 >>= composeGeneration "env36"). *)
-(* MetaCoq Run (mkLemmasTyped (genRinstInsts ("tm", ["vl"])) env36 >>= composeGeneration "env37"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaRinstInsts ["ty"]) env37 >>= composeGeneration "env38"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaRinstInsts ["tm"; "vl"]) env38 >>= composeGeneration "env39"). *)
 
 Module instId.
   Import GenM.Notations GenM.
@@ -1739,8 +1114,8 @@ Module instId.
     let name := instIdName sort in
     process_lemma name (List.concat [bms; [bs]]) innerType innerBody.
 
-  Definition genLemmaInstIds (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaInstId sort)) sorts.
+  Definition genLemmaInstIds (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaInstId sorts.
 
   
   Definition genLemmaRinstId (sort: tId) : t nlemma :=
@@ -1759,16 +1134,11 @@ Module instId.
     let name := rinstIdName sort in
     process_lemma name (List.concat [bms; [bs]]) innerType innerBody.
                          
-  Definition genLemmaRinstIds (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaRinstId sort)) sorts.
+  Definition genLemmaRinstIds (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaRinstId sorts.
   
 End instId.
 Import instId.
-
-(* MetaCoq Run (mkLemmasTyped (genLemmaInstIds ["ty"]) env39 >>= composeGeneration "env40"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaInstIds ["tm"; "vl"]) env40 >>= composeGeneration "env41"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaRinstIds ["ty"]) env41 >>= composeGeneration "env42"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaRinstIds ["tm"; "vl"]) env42 >>= composeGeneration "env43"). *)
 
 
 Module varL.
@@ -1800,9 +1170,9 @@ Module varL.
     let name := varLName sort in
     process_lemma name (List.concat [bms; bns; bsigmas; [bx]]) innerType innerBody.
 
-  Definition genVarLs (sorts: list tId) : t (list lemma) :=
+  Definition genVarLs (sorts: list tId) : t (list nlemma) :=
     varSorts <- a_filter isOpen sorts;;
-    a_map (fun sort => translate_lemma (genVarL sort)) varSorts.
+    a_map genVarL varSorts.
   
 
   Definition genVarLRen (sort: tId) :=
@@ -1824,17 +1194,12 @@ Module varL.
     let name := varLRenName sort in
     process_lemma name (List.concat [bms; bns; bxis; [bx]]) innerType innerBody.
 
-  Definition genVarLRens (sorts: list tId) : t (list lemma) :=
+  Definition genVarLRens (sorts: list tId) : t (list nlemma) :=
     varSorts <- a_filter isOpen sorts;;
-    a_map (fun sort => translate_lemma (genVarLRen sort)) varSorts.
+    a_map genVarLRen varSorts.
   
 End varL.
 Import varL.
-
-(* MetaCoq Run (mkLemmasTyped (genVarLs ["ty"]) env43 >>= composeGeneration "env44"). *)
-(* MetaCoq Run (mkLemmasTyped (genVarLs ["tm"; "vl"]) env44 >>= composeGeneration "env45"). *)
-(* MetaCoq Run (mkLemmasTyped (genVarLRens ["ty"]) env45 >>= composeGeneration "env46"). *)
-(* MetaCoq Run (mkLemmasTyped (genVarLRens ["tm"; "vl"]) env46 >>= composeGeneration "env47"). *)
 
 
 Module comps.
@@ -1866,8 +1231,8 @@ Module comps.
     let name := renRenName sort in
     process_lemma name (List.concat [bks; bls; bms; bxis; bzetas; [bs]]) innerType innerBody.
 
-  Definition genLemmaCompRenRens (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaCompRenRen sort)) sorts.
+  Definition genLemmaCompRenRens (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaCompRenRen sorts.
   
 
   Definition genLemmaCompRenSubst (sort: tId) : t nlemma :=
@@ -1897,8 +1262,8 @@ Module comps.
     let name := renSubstName sort in
     process_lemma name (List.concat [bks; bls; bms; bxis; btaus; [bs]]) innerType innerBody.
 
-  Definition genLemmaCompRenSubsts (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaCompRenSubst  sort)) sorts.
+  Definition genLemmaCompRenSubsts (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaCompRenSubst sorts.
 
 
   Definition genLemmaCompSubstRen (sort: tId) : t nlemma :=
@@ -1927,8 +1292,8 @@ Module comps.
     let name := substRenName sort in
     process_lemma name (List.concat [bks; bls; bms; bsigmas; bzetas; [bs]]) innerType innerBody.
 
-  Definition genLemmaCompSubstRens (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaCompSubstRen  sort)) sorts.
+  Definition genLemmaCompSubstRens (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaCompSubstRen sorts.
 
 
   Definition genLemmaCompSubstSubst (sort: tId) : t nlemma :=
@@ -1958,50 +1323,47 @@ Module comps.
     process_lemma name (List.concat [bks; bls; bms; bsigmas; btaus; [bs]]) innerType innerBody.
 
   
-  Definition genLemmaCompSubstSubsts (sorts: list tId) : t (list lemma) :=
-    a_map (fun sort => translate_lemma (genLemmaCompSubstSubst  sort)) sorts.
+  Definition genLemmaCompSubstSubsts (sorts: list tId) : t (list nlemma) :=
+    a_map genLemmaCompSubstSubst sorts.
 
 End comps.
 Import comps.
 
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompRenRens ["ty"]) env47 >>= composeGeneration "env48"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompRenRens ["tm"; "vl"]) env48 >>= composeGeneration "env49"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompRenSubsts ["ty"]) env49 >>= composeGeneration "env50"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompRenSubsts ["tm"; "vl"]) env50 >>= composeGeneration "env51"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompSubstRens ["ty"]) env51 >>= composeGeneration "env52"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompSubstRens ["tm"; "vl"]) env52 >>= composeGeneration "env53"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompSubstSubsts ["ty"]) env53 >>= composeGeneration "env54"). *)
-(* MetaCoq Run (mkLemmasTyped (genLemmaCompSubstSubsts ["tm"; "vl"]) env54 >>= composeGeneration "env55"). *)
+(* Module proper.
+  Import GenM.Notations GenM.
 
-(* MetaCoq Run (match GenM.run (genUpExts upList_ty) (Hsig_example.mySig, env13) empty_state with *)
-(*              | inr (_, _, x) => *)
-(*                tmEval TemplateMonad.Common.all x >>= tmPrint *)
-(*              | _ => tmFail "fail" *)
-(*              end). *)
-
-(* TODO better document the way to debug this.
- * you can set everything opaque except the thing you want to see the AST of *)
-(*
-Module foo.
-  From ASUB Require Import unscoped.
-  Opaque ren_ty.
-  Opaque ap.
-  Opaque shift.
-  Opaque up_ty_ty.
+  Require Import Setoid Morphisms.
   
- Lemma upId_ty_ty (sigma : nat -> ty) (Eq : forall x, sigma x = var_ty x) :
-  forall n, up_ty_ty sigma n = var_ty n.
-Proof.
-exact (fun n =>
-       match n with
-       | S n' => ap (ren_ty shift) (Eq n')
-       | O => eq_refl
-       end).
-Qed.
+  Definition app_morph {A:Type} : Proper (eq ==> eq ==> eq) (@List.app A).
+  Proof.
+    refine (fun l0 l0' Eq_l0 l1 l1' Eq_l1 => _).
+    rewrite Eq_l1.
+    refine (eq_ind l0 _ _ l0' Eq_l0).
+    rewrite Eq_l0, Eq_l1.
+    reflexivity.
+  Qed.
 
-MetaCoq Quote Definition foo_source := Eval compute in upId_ty_ty.
-End foo.
- *)
+  Existing Instance app_morph.
+
+
+
+
+  Definition genRenMorphism (sort: tId) : t nlemma := 
+    '(ms, bms) <- introScopeVar "m" sort;;
+    '(ns, bns) <- introScopeVar "n" sort;;
+    substSorts <- substOf sort;;
+    sc <- get_scope_type;;
+    (* type *)
+    let innerType := proper_ (mkRespectful substSorts)
+                             (nAppExpl (renName sort) (List.concat [ ss_terms (is_wellscoped sc) ms; 
+                                                                     ss_terms (is_wellscoped sc) ns])) in
+    (* body *)
+    let innerBody := 
+    
+  (* Definition genSubstMorphism (sort: tId) : t nlemma :=  *)
+End proper.
+Import proper. *)
+
 
 (** * Inductive Types *)
 Definition generateInductives (component: NEList.t tId) (info: genInfo) : TemplateMonad genInfo :=
@@ -2009,196 +1371,88 @@ Definition generateInductives (component: NEList.t tId) (info: genInfo) : Templa
   info <- mkInductive (genMutualInductive component) info;;
   tmPrint "Defined Inductive Types";;
   tmReturn info. 
-          
-Definition generateLemmas (component: NEList.t tId) (upList: list (Binder * tId)) (info: genInfo) : TemplateMonad genInfo :=
-  let componentL := NEList.to_list component in
-  (** * Congruence Lemmas *)
-  (* if we generate multiple lemmas we need to keep updating the infoironment in a fold *)
-  info <- monad_fold_left (fun info sort => mkLemmasTyped (genCongruences sort) info) componentL info;;
-  tmPrint "Defined Congruence Lemmas";;
-  hasSubsts <- tm_liftGenM (GenM.hasSubsts (NEList.hd component)) info;;
-  if negb hasSubsts 
-  then tmReturn info
-  else 
-    let isRen := SSet.mem info.(in_sig).(sigRenamings) (NEList.hd component) in
-    if isRen
-    then
-      tmPrint "Has Renamings";;
-      (** * Renamings *)
-      info <- mkLemmasTyped (genUpRens upList) info;;
-      info <- mkLemmasTyped (genRenamings component) info;;
-      (** * Substitutions *)
-      info <- mkLemmasTyped (genUpSubsts upList) info;;
-      info <- mkLemmasTyped (genSubstitutions component) info;;
-      (** * idSubst *)
-      info <- mkLemmasTyped (genUpIds upList) info;;
-      info <- mkLemmasTyped (genIdLemmas component) info;;
-      (** * Extensionality *)
-      info <- mkLemmasTyped (genUpExtRens upList) info;;
-      info <- mkLemmasTyped (genExtRens component) info;;
-      info <- mkLemmasTyped (genUpExts upList) info;;
-      info <- mkLemmasTyped (genExts component) info;;
-      (** * Combinations *)
-      info <- mkLemmasTyped (genUpRenRens upList) info;;
-      info <- mkLemmasTyped (genCompRenRens component) info;;
-      info <- mkLemmasTyped (genUpRenSubsts upList) info;;
-      info <- mkLemmasTyped (genCompRenSubsts component) info;;
-      info <- mkLemmasTyped (genUpSubstRens upList) info;;
-      info <- mkLemmasTyped (genCompSubstRens component) info;;
-      info <- mkLemmasTyped (genUpSubstSubsts upList) info;;
-      info <- mkLemmasTyped (genCompSubstSubsts component) info;;
-      (** * rinstInst *)
-      info <- mkLemmasTyped (genUpRinstInsts upList) info;;
-      info <- mkLemmasTyped (genRinstInsts component) info;;
-      info <- mkLemmasTyped (genLemmaRinstInsts componentL) info;;
-      (** * rinstId/instId *)
-      info <- mkLemmasTyped (genLemmaInstIds componentL) info;;
-      info <- mkLemmasTyped (genLemmaRinstIds componentL) info;;
-      (** * varL *)
-      info <- mkLemmasTyped (genVarLs componentL) info;;
-      info <- mkLemmasTyped (genVarLRens componentL) info;;
-      (** * Combinations *)
-      info <- mkLemmasTyped (genLemmaCompRenRens componentL) info;;
-      info <- mkLemmasTyped (genLemmaCompRenSubsts componentL) info;;
-      info <- mkLemmasTyped (genLemmaCompSubstRens componentL) info;;
-      info <- mkLemmasTyped (genLemmaCompSubstSubsts componentL) info;;
-      tmReturn info
-    else
-      tmPrint "Has No Renamings";;
-      (** * Substitutions *)
-      info <- mkLemmasTyped (genSubstitutions component) info;;
-      info <- mkLemmasTyped (genUpSubsts upList) info;;
-      (** * idSubst *)
-      info <- mkLemmasTyped (genUpIds upList) info;;
-      info <- mkLemmasTyped (genIdLemmas component) info;;
-      (** * Extensionality *)
-      info <- mkLemmasTyped (genUpExts upList) info;;
-      info <- mkLemmasTyped (genExts component) info;;
-      (** * Combinations *)
-      info <- mkLemmasTyped (genCompSubstSubsts component) info;;
-      info <- mkLemmasTyped (genUpSubstSubstsNoRen upList) info;;
-      (** * instId *)
-      info <- mkLemmasTyped (genLemmaInstIds componentL) info;;
-      (** * varL *)
-      info <- mkLemmasTyped (genVarLs componentL) info;;
-      (** * Combinations *)
-      info <- mkLemmasTyped (genLemmaCompSubstSubsts componentL) info;;
-      tmReturn info.
-               
 
-From ASUB Require unscoped core.
-Require Setoid Morphisms.
+Module gen.
+  Import GenM.Notations GenM.
 
-Module generation_pi.
-  (* Time MetaCoq Run (generate ("chan",[]) upList_chan {| in_env := initial_env; in_implicits := SFMap.empty; in_flags := {| fl_scope_type := Wellscoped |}; in_sig := pi_sig |} *)
-  (*                            >>= tmEval TemplateMonad.Common.all *)
-  (*                            >>= generate ("proc", []) upList_proc *)
-  (*                            >>= tmEval TemplateMonad.Common.all *)
-  (*                            >>= tmDefinition "env1"). *)
-End generation_pi.
+  Definition collapseLemmas (tlemmas: list (GenM.t (list nlemma))) : GenM.t (list nlemma) :=
+    fmap (@List.concat nlemma) (sequence tlemmas).
 
-(* Module generation. *)
+  Definition generateLemmas (component: NEList.t tId) (upList: list (Binder * tId)) : GenM.t (list nlemma) :=
+    let componentL := NEList.to_list component in
+    (** * Congruence Lemmas *)
+    (* if we generate multiple lemmas we need to keep updating the infoironment in a fold *)
+    let congruences := fmap (@List.concat nlemma) (a_map genCongruences componentL) in
+    tell "Defined Congruence Lemmas";;
+    hasSubsts <- hasSubsts (NEList.hd component);;
+    if negb hasSubsts 
+    then congruences
+    else 
+      isRen <- hasRenaming (NEList.hd component);;
+      lemmas <- (if isRen
+               then
+                 tell "Has Renamings";;
+                 (** * Renamings *)
+                 pure [ genUpRens upList;
+                      genRenamings component;
+                      (** * Substitutions *)
+                      genUpSubsts upList;
+                      genSubstitutions component;
+                      (** * idSubst *)
+                      genUpIds upList;
+                      genIdLemmas component;
+                      (** * Extensionality *)
+                      genUpExtRens upList;
+                      genExtRens component;
+                      genUpExts upList;
+                      genExts component;
+                      (** * Combinations *)
+                      genUpRenRens upList;
+                      genCompRenRens component;
+                      genUpRenSubsts upList;
+                      genCompRenSubsts component;
+                      genUpSubstRens upList;
+                      genCompSubstRens component;
+                      genUpSubstSubsts upList;
+                      genCompSubstSubsts component;
+                      (** * rinstInst *)
+                      genUpRinstInsts upList;
+                      genRinstInsts component;
+                      genLemmaRinstInsts componentL;
+                      (** * rinstId/instId *)
+                      genLemmaInstIds componentL;
+                      genLemmaRinstIds componentL;
+                      (** * varL *)
+                      genVarLs componentL;
+                      genVarLRens componentL;
+                      (** * Combinations *)
+                      genLemmaCompRenRens componentL;
+                      genLemmaCompRenSubsts componentL;
+                      genLemmaCompSubstRens componentL;
+                      genLemmaCompSubstSubsts componentL ]
+               else
+                 tell "Has No Renamings";;
+                 (** * Substitutions *)
+                 pure [ genSubstitutions component;
+                      genUpSubsts upList;
+                      (** * idSubst *)
+                      genUpIds upList;
+                      genIdLemmas component;
+                      (** * Extensionality *)
+                      genUpExts upList;
+                      genExts component;
+                      (** * Combinations *)
+                      genCompSubstSubsts component;
+                      genUpSubstSubstsNoRen upList;
+                      (** * instId *)
+                      genLemmaInstIds componentL;
+                      (** * varL *)
+                      genVarLs componentL;
+                      (** * Combinations *)
+                      genLemmaCompSubstSubsts componentL ]);;
+      collapseLemmas (congruences :: lemmas).
 
-(*   Import GenUpsExample_fcbv. *)
+End gen.   
 
-(*   Import Setoid Morphisms. *)
-(*   (* Compute (GenM.run (genUpRens upList_ty) Hsig_example.mySig empty_state). *) *)
-(*   Time MetaCoq Run (generate ("ty",[]) upList_ty {| in_env := initial_env; in_implicits := SFMap.empty; in_flags := default_flags; in_sig := Hsig_example.mySig |} *)
-(*                              >>= tmEval TemplateMonad.Common.all *)
-(*                              >>= generate ("tm", ["vl"]) upList_tm *)
-(*                              >>= tmEval TemplateMonad.Common.all *)
-(*                              >>= tmDefinition "env1"). *)
-(*   (* SFMap.t : 7 *) *)
-
-(*   Import unscoped core UnscopedNotations. *)
-(*   Instance subst_ty_morphism : *)
-(*     (Proper (respectful (pointwise_relation _ eq) (respectful eq eq)) *)
-(*             (@subst_ty)). *)
-(*   Proof. *)
-(*     exact (fun f_ty g_ty Eq_ty s t Eq_st => *)
-(*              eq_ind s (fun t' => subst_ty f_ty s = subst_ty g_ty t') *)
-(*                     (ext_ty f_ty g_ty Eq_ty s) t Eq_st). *)
-(*   Qed. *)
-
-(*   Instance ren_ty_morphism : *)
-(*     (Proper (respectful (pointwise_relation _ eq) (respectful eq eq)) (@ren_ty)). *)
-(*   Proof. *)
-(*     exact (fun f_ty g_ty Eq_ty s t Eq_st => *)
-(*              eq_ind s (fun t' => ren_ty f_ty s = ren_ty g_ty t') *)
-(*                     (extRen_ty f_ty g_ty Eq_ty s) t Eq_st). *)
-(*   Qed. *)
-
-
-(*   (* DONE prove the default lemma. If this works we're on the right track *) *)
-(*   Goal forall (f: nat -> ty) (s t: ty), *)
-(*       subst_ty f (subst_ty (scons t var_ty) s) = subst_ty (scons (subst_ty f t) var_ty) (subst_ty (up_ty_ty f) s). *)
-(*   Proof. *)
-(*     intros *. *)
-(*     rewrite ?substSubst_ty. *)
-(*     unfold up_ty_ty, funcomp. *)
-(*     fsimpl. *)
-(*     setoid_rewrite varL_ty. *)
-(*     setoid_rewrite renSubst_ty. *)
-(*     setoid_rewrite instId_ty. *)
-(*     fsimpl. minimize. *)
-(*     reflexivity. *)
-(*   Qed. *)
-(* End generation. *)
-
-
-(* Module generation. *)
-  
-(*   Import GenUpsExample_fcbv. *)
-(*   Import core fintype. *)
-(*   Import Setoid Morphisms. *)
-(*   Compute upList_ty. *)
-(*   Compute upList_tm. *)
-(*   MetaCoq Run (generateInductives ("ty", []) fcbv_info *)
-(*                                  >>= composeGeneration "env0"). *)
-(*   MetaCoq Run (generateInductives ("tm", ["vl"]) env0 *)
-(*                                  >>= composeGeneration "env1"). *)
-(*   MetaCoq Run (generateLemmas ("ty",[]) upList_ty env1 *)
-(*                               >>= composeGeneration "env2"). *)
-(*   (* TODO takes way too long with over 2 minutes! *) *)
-(*   (*  somewhat better with intermediate evaluation but still slow *) *)
-(*   Time MetaCoq Run (generateLemmas ("tm", ["vl"]) upList_tm env2 *)
-(*                               >>= composeGeneration "env3"). *)
-(*   (* implicit lookup in nRef translation: 18s *) *)
-(*   (* implicit lookup in nApp translation: 15s *) *)
-
-(*   Import fintype core ScopedNotations. *)
-(*   (* TODO the morphisms must still be generated *) *)
-(*   Instance subst_ty_morphism {m_ty n_ty : nat} : *)
-(*     (Proper (respectful (pointwise_relation _ eq) (respectful eq eq)) *)
-(*             (@subst_ty m_ty n_ty)). *)
-(*   Proof. *)
-(*     exact (fun f_ty g_ty Eq_ty s t Eq_st => *)
-(*              eq_ind s (fun t' => subst_ty _ _ f_ty s = subst_ty _ _ g_ty t') *)
-(*                     (ext_ty _ _ f_ty g_ty Eq_ty s) t Eq_st). *)
-(*   Qed. *)
-
-(*   Instance ren_ty_morphism {m_ty n_ty : nat} : *)
-(*     (Proper (respectful (pointwise_relation _ eq) (respectful eq eq)) (@ren_ty m_ty n_ty)). *)
-(*   Proof. *)
-(*     exact (fun f_ty g_ty Eq_ty s t Eq_st => *)
-(*              eq_ind s (fun t' => ren_ty _ _ f_ty s = ren_ty _ _ g_ty t') *)
-(*                     (extRen_ty _ _ f_ty g_ty Eq_ty s) t Eq_st). *)
-(*   Qed. *)
-
-
-(*   (* DONE prove the default lemma. If this works we're on the right track *) *)
-(*   Goal forall {m n: nat} (f : fin m -> ty n) (s : ty (S m)) (t : ty m), *)
-(*       subst_ty _ _ f (subst_ty _ _ (scons t (var_ty _)) s) = subst_ty _ _ (scons (subst_ty _ _ f t) (var_ty _)) (subst_ty _ _ (up_ty_ty _ _ f) s). *)
-(*   Proof. *)
-(*     intros *. *)
-(*     rewrite ?substSubst_ty. *)
-(*     unfold up_ty_ty. *)
-(*     (* TODO apparently fsimpl got weaker. Also I need to generate the lemmas with pointwise *) *)
-(*     fsimpl. *)
-(*     setoid_rewrite varL_ty. *)
-(*     (* setoid_rewrite renSubst_ty. *) *)
-(*     (* setoid_rewrite instId_ty. *) *)
-(*     (* fsimpl. minimize. *) *)
-(*     (* reflexivity. *) *)
-(*   Admitted. *)
-(* End generation. *)
+Definition generateLemmas (component: NEList.t tId) (upList: list (Binder * tId)) (info: genInfo) : TemplateMonadSet genInfo :=
+    mkLemmasTyped (gen.generateLemmas component upList) info.

@@ -1,0 +1,72 @@
+#+TITLE: Autosubst MetaCoq
+
+This is a MetaCoq reimplementation of the Autosubst 2 code generator by Kathrin Stark. 
+Like Autosubst 2, it supports well-scoped & unscoped syntax as well as variadic & polyadic syntax.
+
+The MetaCoq reimplementation is unfortunately missing some features:
+- use of functional extensionality
+- the improved asimpl of Autosubst OCaml
+- Notations
+
+As such it is unfortunately an incomplete reimplementation. Even though it generates some automation tactics. The 
+
+Also, it does not support Autosubst 2's modular syntax.
+
+It uses the MetaCoq framework to implement a code generator for syntax with binders.
+
+* Install
+** Opam 
+First, install opam following the [[https://opam.ocaml.org/doc/Install.html][directions for your operating system]].
+
+** Switch
+It is best practice to create a new opam switch to not cause conflicts with any of your other installed packages.
+We will also need to add the Coq repository.
+#+BEGIN_SRC bash
+opam switch create autosubst-metacoq ocaml-base-compiler.4.09.1
+opam repo add coq-released https://coq.inria.fr/opam/released
+#+END_SRC
+
+** Setup
+You can install the dependencies with
+#+BEGIN_SRC bash
+opam install coq.8.13.1 coq-metacoq.1.0~beta2+8.13
+#+END_SRC
+
+You can compile all Coq sources with
+#+BEGIN_SRC bash
+make
+#+END_SRC
+
+
+* Run 
+You can run Autosubst MetaCoq by requiring the Autosubst module.
+
+
+** Signatures
+You specify the input language using a special syntax. 
+The syntax is described in my thesis at https://www.ps.uni-saarland.de/~dapprich/bachelor.php
+Look in the signaturs/ directory for more examples.
+
+The following example contains all possible rules.
+#+begin_src
+-- comments are like in Haskell
+tm : Type -- sort declarations
+nat : Type -- preexisting sort declaration, it must not have any constructors
+
+list : Functor -- functor declarations, only "list", "prod", and "cod" are allowed
+
+-- declaring some constructors for ty
+arr : ty -> ty -> ty
+all : (bind ty in ty) -> ty -- this declares "all" as constructor with a binder that binds a new "ty" variable in a "ty" argument and results in a "ty"
+
+-- declaring some constructos for tm
+app : tm -> list (tm) -> tm               -- application of the list functor to the sort "tm"
+lam (p: nat) : (bind <p, tm> in tm) -> tm -- this declares "lam" as a constructor with parameter "p" which is then used in a variadic binder (i.e. it binds p-many values of "tm")
+const : nat -> tm                         
+#+end_src
+
+
+* Repo
+You can find the code at https://gitlab.com/uds-psl/autosubst-metacoq
+
+

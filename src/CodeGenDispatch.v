@@ -8,16 +8,19 @@ Import ListNotations.
 
 From MetaCoq.Template Require Import All.
 Import MonadNotation.
-From ASUB Require Import Language Utils CodeGenerator GenUps TemplateMonadUtils AssocList GenM Flags.
-Import TemplateMonadInterface.
+From ASUB Require Import Language Utils CodeGenerator GenUps TemplateMonadUtils AssocList GenM Flags AutomationGenerator.
+Import TemplateMonadInterface TemplateMonadNotations.
 
-Definition genCode (sig : Signature) (flags : Flags): TemplateMonad unit :=
+Definition genCode (sig : Signature) (flags : Flags): TemplateMonadSet unit :=
+  mp <- tmCurrentModPath tt;;
   let info := {| in_env := initial_env;
                  in_implicits := SFMap.empty;
                  in_flags := flags;
-                 in_sig := sig |} in
+                 in_sig := sig;
+                 in_modpath := mp |} in
   let components := sig.(sigComponents) in
-  monad_fold_left (fun '(doneUps, info) component =>
+  '(_, info) <- 
+    monad_fold_left (fun '(doneUps, info) component =>
                      let hd_sort := NEList.hd component in
                      substSorts <- tm_liftGenM (GenM.substOf hd_sort) info;;
                      let '(newUps, ups) := getUps substSorts doneUps info.(in_flags).(fl_scope_type) in
@@ -27,13 +30,16 @@ Definition genCode (sig : Signature) (flags : Flags): TemplateMonad unit :=
                      tmReturn (List.app doneUps newUps, info))
                   components
                   ([], info);;
+  generateAutomation info;;
   tmReturn tt.
 
 Definition genCode2 (sig: Signature) (flags: Flags) (env: SFMap.t term): TemplateMonad unit :=
+  mp <- tmCurrentModPath tt;;
   let info := {| in_env := env;
                  in_implicits := SFMap.empty;
                  in_flags := flags;
-                 in_sig := sig |} in
+                 in_sig := sig;
+                 in_modpath := mp |} in
   let components := sig.(sigComponents) in
   monad_fold_left (fun '(doneUps, info) component =>
                      let hd_sort := NEList.hd component in
@@ -45,7 +51,3 @@ Definition genCode2 (sig: Signature) (flags: Flags) (env: SFMap.t term): Templat
                   components
                   ([], info);;
   tmReturn tt.
-
-
-    
-

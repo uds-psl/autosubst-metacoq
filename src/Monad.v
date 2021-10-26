@@ -9,13 +9,8 @@ Module Type RWSEParams.
   Parameter append : W -> W -> W.
 End RWSEParams.
 
-(* Module Type RWSE_T. *)
-(*   Parameter M : Type -> Type. *)
-(*   Parameter bind : forall A B, M A -> (A -> M B) -> M B. *)
 
-(* End RWSE_T. *)
-
-Module RWSE (T: RWSEParams).
+Module RWSEM (T: RWSEParams).
   Definition t (A: Type) := T.R -> T.S -> T.E + (T.W * T.S * A).
 
   Definition join {A: Type} : t (t A) -> t A :=
@@ -144,5 +139,5 @@ Module RWSE (T: RWSEParams).
       a <- m_fold_right f init bs;;
       f b a
     end.
-End RWSE.
+End RWSEM.
 

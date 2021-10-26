@@ -9,7 +9,7 @@
 *)
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Program.Tactics.
-Require Import core.
+From ASUB Require Import core.
 
 Tactic Notation "autosubst_nointr" tactic(t) :=
   let m := fresh "marker" in

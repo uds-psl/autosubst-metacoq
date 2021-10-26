@@ -1,3 +1,6 @@
+(** This module implements the name generation. 
+    Most names are simply parameterized by a sort, or by a sort and a binder. *)
+
 Require Import String List.
 Import ListNotations.
 #[ local ]

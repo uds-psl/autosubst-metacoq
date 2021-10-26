@@ -69,7 +69,8 @@ Fixpoint tm_sequence {A: Type} (mvals: list (TemplateMonadSet A)) : TemplateMona
 Definition tm_liftGenM {A} (m: GenM.t A) (info: genInfo) : TemplateMonadSet A :=
   match GenM.run m {| R_flags := info.(in_flags);
                       R_sig := info.(in_sig);
-                      R_env := info.(in_env) |}
+                      R_env := info.(in_env);
+                      R_modpath := info.(in_modpath) |}
                  (initial_state info.(in_implicits)) with
   | inl e => tmFail e
   | inr (_, _, x) =>

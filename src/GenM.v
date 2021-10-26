@@ -17,16 +17,17 @@ Definition update_env (env env' : SFMap.t term) : SFMap.t term :=
   SFMap.union env env'.
 
 
-(** * Record of information that is carried by the TemplateMonad in between evaluations of the GenM monad. *)
+(** * Record of information that is carried by the TemplateMonad in between evaluations of the GenM monad. Used to fill R' and State. *)
 Record genInfo := { in_env : SFMap.t term;
                     in_implicits : SFMap.t (list bool);
                     in_flags : Flags;
-                    in_sig : Signature }.
+                    in_sig : Signature;
+                    in_modpath : modpath }.
 
 
-Record R' := { R_flags : Flags; R_sig: Signature; R_env : SFMap.t term }.
+Record R' := { R_flags : Flags; R_sig: Signature; R_env : SFMap.t term; R_modpath : modpath }.
 
-(* The RWSE monad that we use to generate the lemmas *)
+(* The RWSEM monad that we use to generate the lemmas *)
 Module GenMArgs.
   (* module parameters cannot be records yet. So define outside and put definition here *)
   Definition R := R'.
@@ -39,7 +40,7 @@ Module GenMArgs.
 End GenMArgs.
 
 Module GenM.
-  Module GenM := RWSE GenMArgs.
+  Module GenM := RWSEM GenMArgs.
   Include GenM.
 
   Import Notations.
@@ -47,7 +48,8 @@ Module GenM.
   Definition runInfo {A: Type} (m: t A) (info: genInfo) :=
     run m {| R_flags := info.(in_flags);
              R_sig := info.(in_sig);
-             R_env := info.(in_env) |}
+             R_env := info.(in_env);
+             R_modpath := info.(in_modpath) |}
         (initial_state info.(in_implicits)).
 
   Definition register_name (name: string) : t unit :=
@@ -75,11 +77,6 @@ Module GenM.
   (*   | None => error (String.append "Not found: " s) *)
   (*   | Some t => pure t *)
   (*   end. *)
-
-  Definition testrun {A} (mv: t A) :=
-    run mv {| R_flags := {| fl_scope_type := Unscoped |};
-              R_sig := Hsig_example.mySig;
-              R_env := initial_env |} empty_state.
 
   (** * Additional functions used during code generation *)
 
@@ -139,4 +136,10 @@ Module GenM.
   Definition get_scope_type : t scope_type :=
     fl <- asks R_flags;;
     pure fl.(fl_scope_type).
+
+  Definition allSorts : t (list tId) :=
+    components <- asks (fun x => x.(R_sig).(sigComponents));;
+    let sorts := List.concat (List.map NEList.to_list components) in
+    pure sorts.
+
 End GenM.

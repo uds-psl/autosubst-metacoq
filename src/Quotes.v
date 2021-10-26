@@ -4,7 +4,7 @@ From ASUB Require Import core.
 
 From ASUB Require unscoped fintype.
 
-(* TODO make definition based on scope_type. There are things both in unscoped and fintype *)
+(* We quote common terms that are used in the proof generation. *)
 MetaCoq Quote Definition nat_q := nat.
 MetaCoq Quote Definition S_q := @S.
 MetaCoq Quote Definition plus_q := @Nat.add.
@@ -27,9 +27,6 @@ MetaCoq Quote Definition unscoped_var_zero_q := @unscoped.var_zero.
 MetaCoq Quote Definition unscoped_shift_q := @unscoped.shift.
 MetaCoq Quote Definition unscoped_up_ren_q := @unscoped.up_ren.
 MetaCoq Quote Definition unscoped_up_ren_ren_q := @unscoped.up_ren_ren.
-(* TODO quoting e.g. shift without the @ quotes it with an implicit argument (i.e. an evar)
- * Then using this term to generate code triggers an exception when unquoting because the contained evar has not been declared. Should go in the "keep in mind" section *)
-
 
 MetaCoq Quote Definition fintype_scons_q := @fintype.scons.
 MetaCoq Quote Definition fintype_var_zero_q := @fintype.var_zero.

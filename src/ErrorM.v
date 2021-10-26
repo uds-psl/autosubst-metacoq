@@ -6,8 +6,7 @@ From ASUB Require Import Monad.
 
 (* a.d. TODO maybe write the error monad directly. *)
 
-(* Adding the module type annotation breaks other modules because then E is not transparent
- * TODO find out why *)
+(* Adding the module type annotation breaks other modules because then E is not transparent *)
 Module EArgs (* : RWSEParams *).
   Definition R := unit.
   Definition W := unit.
@@ -18,4 +17,4 @@ Module EArgs (* : RWSEParams *).
   Definition empty := tt.
 End EArgs.
 
-Module ErrorM := RWSE EArgs.
+Module ErrorM := RWSEM EArgs.

@@ -7,7 +7,8 @@ From MetaCoq.Template Require Import All.
 
 (* TODO add another node for embedded terms. This should be a bit more performant when we use predefined terms like "eq" since we don't really need to look them up in the environment. *)
 Inductive nterm : Type :=
-| nRef : string -> nterm (* turns into tRel, tConst, tInd, tConstruct from the normal term type *)
+| nRef : string -> nterm (* turns into tRel, tInd, tConstruct from the normal term type. This needs to looked up in the environment during translation *)
+| nConst : string -> nterm (* turns into tConst from the normal term type. We use the modpath from GenM to build the correct kername *)
 | nHole : nterm
 | nTerm : term -> nterm
 | nProd : string -> nterm -> nterm -> nterm

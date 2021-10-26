@@ -121,12 +121,9 @@ Definition add_tbinders (args: list gallinaArg) (innerType: nterm) : nterm :=
 Definition process_lemma (name: string) (args: list gallinaArg) (innerType innerProof: nterm) : t nlemma :=
   let type := add_tbinders args innerType in
   let proof := add_binders args innerProof in
-  register_name name;;
   process_implicits name args;;
   pure (name, type, proof).
 
-
-(** * The following definitions are just hardcoded for System F ty *)
 
 
 (** * Construct the body of a definition depending on if the given sort matches the one in the binder *)
@@ -154,7 +151,13 @@ Definition bparameters (binder: Binder) : list nterm * list gallinaArg :=
 
 Definition abs_ref x t := nLambda x nHole t.
 Definition app_ref n ts := nApp (nRef n) ts.
+(* Definition app_const n ts := nApp (nConst n) ts. *)
 Definition app_sort (sort: tId) (st: scope_type) (scope: substScope) := app_ref sort (ss_terms (is_wellscoped st) scope).
+Definition app_constr (cname: string) (st: scope_type) (scope: substScope) (rest: list nterm) : nterm :=
+  app_ref cname (List.app (ss_terms (is_wellscoped st) scope) rest).
+
+Definition var_constr (sort: tId) := nRef (varConstrName sort).
+
 
 Definition toVarHelper (sort: tId) (assoc: SFMap.t nterm) : t nterm :=
   match SFMap.find assoc sort with
@@ -179,11 +182,6 @@ Definition genVarArg (sort: string) (ns: substScope) : t nterm :=
   | Unscoped => pure nat_
   | Wellscoped => fmap fin_ (toVarScope sort ns)
   end.
-
-Definition app_constr (cname: string) (st: scope_type) (scope: substScope) (rest: list nterm) : nterm :=
-  app_ref cname (List.app (ss_terms (is_wellscoped st) scope) rest).
-
-Definition var_constr (sort: tId) := nRef (varConstrName sort).
 
 (** Create an extensional equivalence between unary functions s & t
  ** forall x, s x = t x *)
@@ -279,13 +277,17 @@ pure (xi >>> app_constr (varConstrName substSort) scope_type ns' []))
 
 (* TODO if I want to actually use isRec I would need to change the dbody of all the fexprs so I probably won't use it. *)
 (* convert a list of fixpoint bodies into as many fixpoint definitions. Each fixpoint definitions references all the fixpoint bodies but has a different index into the list of bodies. *)
-Definition buildFixpoint (fixBodies: list (def nterm)) (isRec: bool) : t (list lemma) :=
-  fixNames <- a_map get_fix_name fixBodies;;
-  register_names fixNames;;
-  let fixExprs :=  mapi (fun n _ => nFix fixBodies n) fixBodies in
-  fixExprs <- a_map translate fixExprs;;
-  types <- a_map translate (List.map dtype fixBodies);;
-  pure (map2 (fun name '(t, typ) => (name, typ, t)) fixNames (List.combine fixExprs types)).
+Definition buildFixpoint (fixBodies: list (def nterm)) (isRec: bool) : t (list nlemma) :=
+  a_mapi (fun n d => name <- get_fix_name d;;
+                  let body := nFix fixBodies n in (* each definition contains the whole fixpoint *)
+                  pure (name, d.(dtype), body))
+         fixBodies.
+
+Definition genFixpoint (genF : tId -> t (def nterm)) (component: NEList.t tId) : t (list nlemma) :=
+  let componentL := NEList.to_list component in
+  isRec <- isRecursive component;;
+  fexprs <- a_map genF componentL;;
+  buildFixpoint fexprs isRec.
 
 Definition renT (st: scope_type) (m n: nterm) :=
   match st with
@@ -475,10 +477,4 @@ Definition scoped_arity : term :=
 
 Definition unscoped_arity : term :=
   tSort Universe.type0.
-
-Definition genFixpoint (genF : tId -> t (def nterm)) (component: NEList.t tId) : t (list lemma) :=
-  let componentL := NEList.to_list component in
-  isRec <- isRecursive component;;
-  fexprs <- a_map genF componentL;;
-  buildFixpoint fexprs isRec.
 

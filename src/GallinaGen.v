@@ -43,20 +43,31 @@ Fixpoint zipImplicits (implicits: list bool) (ts: list term) : GenM.t (list term
          end
   end.
 
+(** Translates our custom AST to the MetaCoq AST,
+ ** the debruijn map is updated when translation goes beneath a binder. *)
 Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
   match t with
   | nRef s =>
-    (* check dbmap and environment *)
+    (* We first check if the reference is a local variable in the dbmap *)
     x <- (match dbmap s with
          | Some n => pure (tRel n)
          | None =>
+           (* if it's not local we check if it's defined in the environment *)
            env <- asks R_env;;
            match SFMap.find env s with
            | Some t => pure t
-           | None => error (append "Unknown Identifier during Gallina Translation: " s)
+           | None =>
+             (* otherwise we assume it is a definition from the current module (e.g. if one of our lemmas references another)
+              * so we make a fully qualified name by prepending the module path *)
+             mp <- asks R_modpath;;
+             pure (tConst (mp, s) [])
            end
         end);;
     pure x
+  | nConst s =>
+    (* constants are always assumed to be from the current module *)
+    mp <- asks R_modpath;;
+    pure (tConst (mp, s) [])
   | nHole => pure hole
   | nTerm t => pure t
   | nProd s nt0 nt1 =>
@@ -112,14 +123,12 @@ Fixpoint translate' (dbmap: DB.t) (t: nterm) : GenM.t term :=
     pure (tCase (ind, paramNum, Relevant) telimPred tdiscr tbranches)
   end.
 
-(* TODO merge left-nested applications
- * We want to save information in the envionment about implicit arguments of certain functions.
- * Therefore we want to have an analysis step where if we have an nApp of an nRef we check if this reference should have any implicit arguments and add them to the argument list *)
+(** Translates our custom AST to the MetaCoq AST *)
 Definition translate (t: nterm) : GenM.t term :=
   translate' DB.empty t.
   
-Definition translate_lemma (l: t nlemma) : GenM.t lemma :=
-  '(lname, ntype, nbody) <- l;;
+Definition translate_lemma (l: nlemma) : GenM.t lemma :=
+  let '(lname, ntype, nbody) := l in
   ttype <- translate ntype;;
   tbody <- translate nbody;;
   pure (lname, ttype, tbody).
